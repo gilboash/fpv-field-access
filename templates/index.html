@@ -12,46 +12,45 @@
   header p { font-size: 12px; color: #888; margin-top: 2px; }
   .video-list { padding: 12px; }
 
-  .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; display: flex; gap: 0; }
+  .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; display: flex; }
   .thumb-wrap { width: 120px; flex-shrink: 0; background: #111; cursor: pointer; position: relative; }
   .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb-wrap .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.2s; font-size: 28px; }
-  .thumb-wrap:hover .play-icon { opacity: 1; }
+  .thumb-wrap:hover .play-icon, .thumb-wrap:active .play-icon { opacity: 1; }
   .thumb-placeholder { width: 100%; height: 100%; min-height: 80px; background: #222; display: flex; align-items: center; justify-content: center; color: #555; font-size: 11px; }
-
   .card-body { flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
   .video-name { font-size: 14px; font-weight: 500; }
   .video-meta { font-size: 12px; color: #888; margin-top: 2px; }
   .card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
   .btn { padding: 7px 12px; border-radius: 8px; border: none; font-size: 12px; cursor: pointer; font-weight: 500; }
   .btn-play { background: #2563eb; color: #fff; }
-  .btn-trim { background: #7c3aed; color: #fff; }
   .btn-dl { background: #374151; color: #fff; }
 
   /* Modal */
-  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.97); z-index: 100; flex-direction: column; overflow-y: auto; }
+  .modal { display: none; position: fixed; inset: 0; background: #0f0f0f; z-index: 100; flex-direction: column; overflow-y: auto; }
   .modal.open { display: flex; }
   .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; position: sticky; top: 0; background: #0f0f0f; z-index: 1; border-bottom: 1px solid #222; }
   .modal-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; }
   .close-btn { background: #2a2a2a; border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer; flex-shrink: 0; }
   video { width: 100%; background: #000; }
 
-  .edit-panel { padding: 16px; }
-  .section { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-  .section-title { font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+  /* Trim panel */
+  .trim-panel { padding: 16px; }
+  .section { background: #1a1a1a; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .section-title { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
 
-  .input-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .input-row { display: flex; align-items: center; gap: 10px; }
   .input-row label { font-size: 13px; color: #888; width: 44px; flex-shrink: 0; }
   .input-row input { background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 8px 10px; border-radius: 8px; flex: 1; font-size: 14px; }
+  .use-current { padding: 8px 12px; border-radius: 8px; border: none; background: #2563eb22; color: #60a5fa; font-size: 12px; cursor: pointer; border: 1px solid #2563eb44; white-space: nowrap; }
 
-  .pill-group { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .pill { padding: 7px 14px; border-radius: 20px; border: 1px solid #333; background: transparent; color: #aaa; font-size: 13px; cursor: pointer; transition: all 0.15s; }
-  .pill.active { border-color: #7c3aed; background: #7c3aed22; color: #c084fc; }
+  .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { padding: 7px 14px; border-radius: 20px; border: 1px solid #333; background: transparent; color: #888; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .pill.dur-active { border-color: #7c3aed; background: #7c3aed22; color: #c084fc; }
   .pill.q-active { border-color: #2563eb; background: #2563eb22; color: #60a5fa; }
+  .quality-desc { font-size: 12px; color: #555; margin-top: 8px; }
 
-  .quality-desc { font-size: 12px; color: #555; margin-bottom: 12px; min-height: 16px; }
-
-  .btn-full { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; background: #7c3aed; color: #fff; }
+  .btn-full { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; background: #7c3aed; color: #fff; margin-top: 4px; }
   .btn-full:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .progress-wrap { margin-top: 12px; display: none; }
@@ -68,6 +67,7 @@
   .error-box { margin-top: 12px; padding: 12px; background: #2a0f0f; border: 1px solid #4a1a1a; border-radius: 8px; font-size: 12px; color: #f87171; display: none; }
   .error-box.show { display: block; }
   .empty { text-align: center; padding: 60px 20px; color: #555; }
+  .divider { font-size: 11px; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.6px; padding: 4px 0 12px; }
 </style>
 </head>
 <body>
@@ -79,28 +79,24 @@
 
 <div class="video-list" id="video-list"></div>
 
-<!-- Player modal -->
-<div class="modal" id="player-modal">
+<!-- Single modal: player + trim -->
+<div class="modal" id="modal">
   <div class="modal-header">
-    <span class="modal-title" id="player-title"></span>
-    <button class="close-btn" onclick="closePlayer()">×</button>
+    <span class="modal-title" id="modal-title"></span>
+    <button class="close-btn" onclick="closeModal()">×</button>
   </div>
-  <video id="player-video" controls playsinline></video>
-</div>
 
-<!-- Trim modal -->
-<div class="modal" id="trim-modal">
-  <div class="modal-header">
-    <span class="modal-title" id="trim-title"></span>
-    <button class="close-btn" onclick="closeTrim()">×</button>
-  </div>
-  <div class="edit-panel">
+  <video id="modal-video" controls playsinline></video>
+
+  <div class="trim-panel">
+    <div class="divider">Trim & Export</div>
 
     <div class="section">
-      <div class="section-title">Start time (seconds)</div>
+      <div class="section-title">Start time</div>
       <div class="input-row">
         <label>Start</label>
         <input type="number" id="trim-start" placeholder="0" min="0" step="1" value="0">
+        <button class="use-current" onclick="useCurrentTime()">Use current</button>
       </div>
     </div>
 
@@ -110,7 +106,7 @@
         <button class="pill" onclick="setDuration(5, this)">5s</button>
         <button class="pill" onclick="setDuration(10, this)">10s</button>
         <button class="pill" onclick="setDuration(15, this)">15s</button>
-        <button class="pill active" onclick="setDuration(30, this)">30s</button>
+        <button class="pill dur-active" onclick="setDuration(30, this)">30s</button>
         <button class="pill" onclick="setDuration(60, this)">60s</button>
       </div>
     </div>
@@ -137,16 +133,15 @@
 
     <div class="result-box" id="result-box">
       <p>✓ Ready to download</p>
-      <button class="btn-download-result" id="download-btn" onclick="downloadResult()">↓ Download clip</button>
+      <button class="btn-download-result" onclick="downloadResult()">↓ Download clip</button>
     </div>
 
     <div class="error-box" id="error-box"></div>
-
   </div>
 </div>
 
 <script>
-  let trimPath = null;
+  let currentPath = null;
   let trimDuration = 30;
   let trimQuality = 'original';
   let resultFilename = null;
@@ -160,8 +155,8 @@
 
   function setDuration(val, el) {
     trimDuration = val;
-    document.querySelectorAll('#duration-pills .pill').forEach(p => p.classList.remove('active'));
-    el.classList.add('active');
+    document.querySelectorAll('#duration-pills .pill').forEach(p => p.classList.remove('dur-active'));
+    el.classList.add('dur-active');
   }
 
   function setQuality(val, el) {
@@ -169,6 +164,11 @@
     document.querySelectorAll('#quality-pills .pill').forEach(p => p.classList.remove('q-active'));
     el.classList.add('q-active');
     document.getElementById('quality-desc').textContent = qualityDescs[val];
+  }
+
+  function useCurrentTime() {
+    const video = document.getElementById('modal-video');
+    document.getElementById('trim-start').value = Math.floor(video.currentTime);
   }
 
   async function loadVideos() {
@@ -185,7 +185,7 @@
 
     list.innerHTML = videos.map(v => `
       <div class="video-card">
-        <div class="thumb-wrap" onclick="openPlayer('${v.path}', '${v.name}')">
+        <div class="thumb-wrap" onclick="openModal('${v.path}', '${v.name}')">
           <img src="/api/thumbnail/${v.path}"
                onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
                alt="">
@@ -198,8 +198,7 @@
             <div class="video-meta">${v.size_mb} MB</div>
           </div>
           <div class="card-actions">
-            <button class="btn btn-play" onclick="openPlayer('${v.path}', '${v.name}')">▶ Play</button>
-            <button class="btn btn-trim" onclick="openTrim('${v.path}', '${v.name}')">✂ Trim</button>
+            <button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play & Trim</button>
             <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
           </div>
         </div>
@@ -207,21 +206,10 @@
     `).join('');
   }
 
-  function openPlayer(path, name) {
-    document.getElementById('player-title').textContent = name;
-    document.getElementById('player-video').src = '/api/stream/' + path;
-    document.getElementById('player-modal').classList.add('open');
-  }
-
-  function closePlayer() {
-    document.getElementById('player-modal').classList.remove('open');
-    document.getElementById('player-video').pause();
-    document.getElementById('player-video').src = '';
-  }
-
-  function openTrim(path, name) {
-    trimPath = path;
-    document.getElementById('trim-title').textContent = name;
+  function openModal(path, name) {
+    currentPath = path;
+    document.getElementById('modal-title').textContent = name;
+    document.getElementById('modal-video').src = '/api/stream/' + path;
     document.getElementById('trim-start').value = 0;
     document.getElementById('trim-btn').disabled = false;
     document.getElementById('progress-wrap').classList.remove('show');
@@ -229,13 +217,15 @@
     document.getElementById('error-box').classList.remove('show');
     document.getElementById('progress-fill').style.width = '0%';
     resultFilename = null;
-    document.getElementById('trim-modal').classList.add('open');
+    document.getElementById('modal').classList.add('open');
   }
 
-  function closeTrim() {
-    document.getElementById('trim-modal').classList.remove('open');
+  function closeModal() {
+    document.getElementById('modal').classList.remove('open');
+    document.getElementById('modal-video').pause();
+    document.getElementById('modal-video').src = '';
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    trimPath = null;
+    currentPath = null;
   }
 
   function downloadOriginal(path) {
@@ -247,7 +237,7 @@
   }
 
   async function startTrim() {
-    if (!trimPath) return;
+    if (!currentPath) return;
     const start = parseFloat(document.getElementById('trim-start').value) || 0;
 
     document.getElementById('trim-btn').disabled = true;
@@ -256,24 +246,16 @@
     document.getElementById('progress-wrap').classList.add('show');
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-pct').textContent = '0%';
-
-    if (trimQuality === 'original') {
-      document.getElementById('progress-text').textContent = 'Copying (no re-encode)...';
-    } else {
-      document.getElementById('progress-text').textContent = 'Encoding — this may take a few minutes...';
-    }
+    document.getElementById('progress-text').textContent =
+      trimQuality === 'original' ? 'Copying (no re-encode)...' : 'Encoding — this may take a few minutes...';
 
     const res = await fetch('/api/trim', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ path: trimPath, start, duration: trimDuration, quality: trimQuality })
+      body: JSON.stringify({ path: currentPath, start, duration: trimDuration, quality: trimQuality })
     });
     const data = await res.json();
-    if (data.error) {
-      showError(data.error);
-      return;
-    }
-
+    if (data.error) { showError(data.error); return; }
     pollProgress(data.job_id);
   }
 
@@ -282,14 +264,12 @@
     pollTimer = setInterval(async () => {
       const res = await fetch(`/api/progress/${jobId}?duration=${trimDuration}`);
       const data = await res.json();
-
       if (data.status === 'running' || data.status === 'queued') {
         const pct = data.progress || 0;
         document.getElementById('progress-fill').style.width = pct + '%';
         document.getElementById('progress-pct').textContent = pct + '%';
       } else if (data.status === 'done') {
-        clearInterval(pollTimer);
-        pollTimer = null;
+        clearInterval(pollTimer); pollTimer = null;
         document.getElementById('progress-fill').style.width = '100%';
         document.getElementById('progress-pct').textContent = '100%';
         resultFilename = data.output;
@@ -299,8 +279,7 @@
           document.getElementById('trim-btn').disabled = false;
         }, 400);
       } else if (data.status === 'error') {
-        clearInterval(pollTimer);
-        pollTimer = null;
+        clearInterval(pollTimer); pollTimer = null;
         showError(data.error || 'Encoding failed');
       }
     }, 1000);
