@@ -1,12 +1,20 @@
 import os
 import subprocess
+import threading
+import uuid
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
 
 SD_PATH = "/media/naco/3834-6662"
 WORK_DIR = os.path.expanduser("~/fpv-field-access/work")
+THUMB_DIR = os.path.join(WORK_DIR, "thumbs")
 os.makedirs(WORK_DIR, exist_ok=True)
+os.makedirs(THUMB_DIR, exist_ok=True)
+
+# job_id -> {'progress': 0-100, 'status': 'running'|'done'|'error', 'output': filename}
+jobs = {}
+jobs_lock = threading.Lock()
 
 def get_videos():
     videos = []
@@ -23,6 +31,45 @@ def get_videos():
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
+def get_thumb_name(filename):
+    base = os.path.splitext(filename)[0]
+    return f"{base}_thumb.jpg"
+
+def parse_ffmpeg_progress(progress_file, duration_secs):
+    try:
+        with open(progress_file, 'r') as f:
+            content = f.read()
+        for line in reversed(content.strip().split('\n')):
+            if line.startswith('out_time_ms='):
+                ms = int(line.split('=')[1])
+                secs = ms / 1_000_000
+                pct = min(int((secs / duration_secs) * 100), 99)
+                return pct
+    except:
+        pass
+    return 0
+
+def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
+    with jobs_lock:
+        jobs[job_id]['status'] = 'running'
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    with jobs_lock:
+        if result.returncode == 0:
+            os.rename(tmp, out)
+            jobs[job_id]['status'] = 'done'
+            jobs[job_id]['progress'] = 100
+            jobs[job_id]['output'] = os.path.basename(out)
+        else:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            jobs[job_id]['status'] = 'error'
+            jobs[job_id]['error'] = result.stderr[-300:]
+
+    if os.path.exists(progress_file):
+        os.remove(progress_file)
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -31,6 +78,26 @@ def index():
 def list_videos():
     return jsonify(get_videos())
 
+@app.route('/api/thumbnail/<path:filepath>')
+def thumbnail(filepath):
+    filename = os.path.basename(filepath)
+    thumb_name = get_thumb_name(filename)
+    thumb_path = os.path.join(THUMB_DIR, thumb_name)
+
+    if not os.path.exists(thumb_path):
+        src = os.path.join(SD_PATH, filepath)
+        tmp = thumb_path + ".tmp.jpg"
+        cmd = ['ffmpeg', '-y', '-ss', '3', '-i', src,
+               '-vframes', '1', '-q:v', '5',
+               '-vf', 'scale=480:-1', tmp]
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode == 0:
+            os.rename(tmp, thumb_path)
+        else:
+            return '', 404
+
+    return send_file(thumb_path, mimetype='image/jpeg')
+
 @app.route('/api/stream/<path:filepath>')
 def stream(filepath):
     full = os.path.join(SD_PATH, filepath)
@@ -38,7 +105,7 @@ def stream(filepath):
     range_header = request.headers.get('Range')
 
     if range_header:
-        byte_start, byte_end = 0, None
+        byte_start = 0
         match = range_header.replace('bytes=', '').split('-')
         byte_start = int(match[0])
         byte_end = int(match[1]) if match[1] else file_size - 1
@@ -72,26 +139,78 @@ def download(filepath):
 def trim():
     data = request.json
     base = os.path.splitext(os.path.basename(data['path']))[0]
-    out = os.path.join(WORK_DIR, f"trim_{base}.mp4")
-    tmp = os.path.join(WORK_DIR, f"trim_{base}_tmp.mp4")
-    start = data.get('start', 0)
-    end = data.get('end')
+    quality = data.get('quality', 'original')  # original | medium | low
+    start = float(data.get('start', 0))
+    duration = float(data.get('duration', 30))
+    job_id = str(uuid.uuid4())[:8]
 
-    if end and float(end) <= float(start):
-        return jsonify({"error": "End must be greater than start"}), 400
+    out = os.path.join(WORK_DIR, f"trim_{base}_{quality}_{job_id}.mp4")
+    tmp = os.path.join(WORK_DIR, f"trim_{base}_{quality}_{job_id}_tmp.mp4")
+    progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
+    src = os.path.join(SD_PATH, data['path'])
 
-    cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', os.path.join(SD_PATH, data['path'])]
-    if end:
-        cmd += ['-t', str(float(end) - float(start))]
-    cmd += ['-c', 'copy', tmp]
+    with jobs_lock:
+        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        os.rename(tmp, out)
-        return jsonify({"output": os.path.basename(out)})
-    if os.path.exists(tmp):
-        os.remove(tmp)
-    return jsonify({"error": result.stderr[-500:]}), 500
+    if quality == 'original':
+        cmd = ['ffmpeg', '-y',
+               '-ss', str(start), '-i', src,
+               '-t', str(duration),
+               '-c', 'copy',
+               '-progress', progress_file,
+               tmp]
+    elif quality == 'medium':
+        cmd = ['ffmpeg', '-y',
+               '-ss', str(start), '-i', src,
+               '-t', str(duration),
+               '-r', '30',
+               '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
+               '-threads', '1',
+               '-c:a', 'aac', '-b:a', '96k',
+               '-movflags', '+faststart',
+               '-progress', progress_file,
+               tmp]
+    else:  # low
+        cmd = ['ffmpeg', '-y',
+               '-ss', str(start), '-i', src,
+               '-t', str(duration),
+               '-r', '24',
+               '-vf', 'scale=640:-2',
+               '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
+               '-threads', '1',
+               '-c:a', 'aac', '-b:a', '64k',
+               '-movflags', '+faststart',
+               '-progress', progress_file,
+               tmp]
+
+    t = threading.Thread(
+        target=run_trim_job,
+        args=(job_id, src, out, tmp, cmd, duration, progress_file),
+        daemon=True
+    )
+    t.start()
+
+    return jsonify({'job_id': job_id})
+
+@app.route('/api/progress/<job_id>')
+def progress(job_id):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'not found'}), 404
+
+    progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
+    duration = request.args.get('duration', 30, type=float)
+
+    if job['status'] == 'running':
+        pct = parse_ffmpeg_progress(progress_file, duration)
+        return jsonify({'status': 'running', 'progress': pct})
+    elif job['status'] == 'done':
+        return jsonify({'status': 'done', 'progress': 100, 'output': job['output']})
+    elif job['status'] == 'error':
+        return jsonify({'status': 'error', 'error': job.get('error', 'unknown')})
+    else:
+        return jsonify({'status': 'queued', 'progress': 0})
 
 @app.route('/api/output/<filename>')
 def get_output(filename):

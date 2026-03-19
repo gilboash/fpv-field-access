@@ -11,35 +11,62 @@
   header h1 { font-size: 20px; font-weight: 600; }
   header p { font-size: 12px; color: #888; margin-top: 2px; }
   .video-list { padding: 12px; }
-  .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
-  .video-info { padding: 12px 12px 8px; }
+
+  .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; display: flex; gap: 0; }
+  .thumb-wrap { width: 120px; flex-shrink: 0; background: #111; cursor: pointer; position: relative; }
+  .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb-wrap .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.2s; font-size: 28px; }
+  .thumb-wrap:hover .play-icon { opacity: 1; }
+  .thumb-placeholder { width: 100%; height: 100%; min-height: 80px; background: #222; display: flex; align-items: center; justify-content: center; color: #555; font-size: 11px; }
+
+  .card-body { flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
   .video-name { font-size: 14px; font-weight: 500; }
   .video-meta { font-size: 12px; color: #888; margin-top: 2px; }
-  .video-actions { display: flex; gap: 8px; padding: 0 12px 12px; flex-wrap: wrap; }
-  .btn { padding: 8px 14px; border-radius: 8px; border: none; font-size: 13px; cursor: pointer; font-weight: 500; }
+  .card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .btn { padding: 7px 12px; border-radius: 8px; border: none; font-size: 12px; cursor: pointer; font-weight: 500; }
   .btn-play { background: #2563eb; color: #fff; }
-  .btn-download { background: #16a34a; color: #fff; }
-  .btn-edit { background: #7c3aed; color: #fff; }
-  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; flex-direction: column; overflow-y: auto; }
-  .modal.open { display: flex; }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px; position: sticky; top: 0; background: #0f0f0f; z-index: 1; }
-  .modal-title { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; }
-  .close-btn { background: #333; border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; flex-shrink: 0; }
-  video { width: 100%; background: #000; }
-  .edit-panel { padding: 16px; }
-  .edit-section { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
-  .edit-section h3 { font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-  .hint { font-size: 12px; color: #555; margin-bottom: 12px; }
-  .input-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .input-row label { font-size: 13px; color: #888; width: 50px; }
-  .input-row input { background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 8px; flex: 1; font-size: 14px; }
-  .btn-full { width: 100%; padding: 12px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 4px; }
   .btn-trim { background: #7c3aed; color: #fff; }
-  .status { padding: 12px; background: #222; border-radius: 8px; font-size: 13px; margin-top: 8px; display: none; line-height: 1.4; }
-  .status.show { display: block; }
-  .status.success { border-left: 3px solid #16a34a; color: #4ade80; }
-  .status.error { border-left: 3px solid #dc2626; color: #f87171; }
-  .status.loading { border-left: 3px solid #2563eb; color: #60a5fa; }
+  .btn-dl { background: #374151; color: #fff; }
+
+  /* Modal */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.97); z-index: 100; flex-direction: column; overflow-y: auto; }
+  .modal.open { display: flex; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; position: sticky; top: 0; background: #0f0f0f; z-index: 1; border-bottom: 1px solid #222; }
+  .modal-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; }
+  .close-btn { background: #2a2a2a; border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer; flex-shrink: 0; }
+  video { width: 100%; background: #000; }
+
+  .edit-panel { padding: 16px; }
+  .section { background: #1a1a1a; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .section-title { font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+
+  .input-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .input-row label { font-size: 13px; color: #888; width: 44px; flex-shrink: 0; }
+  .input-row input { background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 8px 10px; border-radius: 8px; flex: 1; font-size: 14px; }
+
+  .pill-group { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .pill { padding: 7px 14px; border-radius: 20px; border: 1px solid #333; background: transparent; color: #aaa; font-size: 13px; cursor: pointer; transition: all 0.15s; }
+  .pill.active { border-color: #7c3aed; background: #7c3aed22; color: #c084fc; }
+  .pill.q-active { border-color: #2563eb; background: #2563eb22; color: #60a5fa; }
+
+  .quality-desc { font-size: 12px; color: #555; margin-bottom: 12px; min-height: 16px; }
+
+  .btn-full { width: 100%; padding: 13px; border-radius: 10px; border: none; font-size: 15px; font-weight: 600; cursor: pointer; background: #7c3aed; color: #fff; }
+  .btn-full:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .progress-wrap { margin-top: 12px; display: none; }
+  .progress-wrap.show { display: block; }
+  .progress-label { font-size: 12px; color: #888; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .progress-bar { height: 4px; background: #2a2a2a; border-radius: 4px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #7c3aed; border-radius: 4px; transition: width 0.4s; width: 0%; }
+
+  .result-box { margin-top: 12px; padding: 12px; background: #0f2a1a; border: 1px solid #1a4a2a; border-radius: 8px; display: none; }
+  .result-box.show { display: block; }
+  .result-box p { font-size: 13px; color: #4ade80; margin-bottom: 8px; }
+  .btn-download-result { width: 100%; padding: 10px; border-radius: 8px; border: none; background: #16a34a; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+  .error-box { margin-top: 12px; padding: 12px; background: #2a0f0f; border: 1px solid #4a1a1a; border-radius: 8px; font-size: 12px; color: #f87171; display: none; }
+  .error-box.show { display: block; }
   .empty { text-align: center; padding: 60px 20px; color: #555; }
 </style>
 </head>
@@ -52,40 +79,105 @@
 
 <div class="video-list" id="video-list"></div>
 
-<div class="modal" id="modal">
+<!-- Player modal -->
+<div class="modal" id="player-modal">
   <div class="modal-header">
-    <span class="modal-title" id="modal-title">Video</span>
-    <button class="close-btn" onclick="closeModal()">×</button>
+    <span class="modal-title" id="player-title"></span>
+    <button class="close-btn" onclick="closePlayer()">×</button>
   </div>
-  <video id="modal-video" controls playsinline></video>
+  <video id="player-video" controls playsinline></video>
+</div>
+
+<!-- Trim modal -->
+<div class="modal" id="trim-modal">
+  <div class="modal-header">
+    <span class="modal-title" id="trim-title"></span>
+    <button class="close-btn" onclick="closeTrim()">×</button>
+  </div>
   <div class="edit-panel">
-    <div class="edit-section">
-      <h3>Trim clip</h3>
-      <p class="hint">Use the video player to find your start/end times in seconds</p>
+
+    <div class="section">
+      <div class="section-title">Start time (seconds)</div>
       <div class="input-row">
         <label>Start</label>
-        <input type="number" id="trim-start" placeholder="0" min="0" step="1">
+        <input type="number" id="trim-start" placeholder="0" min="0" step="1" value="0">
       </div>
-      <div class="input-row">
-        <label>End</label>
-        <input type="number" id="trim-end" placeholder="seconds" min="0" step="1">
-      </div>
-      <button class="btn btn-full btn-trim" onclick="trimVideo()">✂ Trim & Download</button>
     </div>
-    <div class="status" id="status"></div>
+
+    <div class="section">
+      <div class="section-title">Clip duration</div>
+      <div class="pill-group" id="duration-pills">
+        <button class="pill" onclick="setDuration(5, this)">5s</button>
+        <button class="pill" onclick="setDuration(10, this)">10s</button>
+        <button class="pill" onclick="setDuration(15, this)">15s</button>
+        <button class="pill active" onclick="setDuration(30, this)">30s</button>
+        <button class="pill" onclick="setDuration(60, this)">60s</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Quality</div>
+      <div class="pill-group" id="quality-pills">
+        <button class="pill q-active" onclick="setQuality('original', this)">Original</button>
+        <button class="pill" onclick="setQuality('medium', this)">Medium</button>
+        <button class="pill" onclick="setQuality('low', this)">Low</button>
+      </div>
+      <div class="quality-desc" id="quality-desc">Full quality, instant — same as source</div>
+    </div>
+
+    <button class="btn-full" id="trim-btn" onclick="startTrim()">✂ Trim & Export</button>
+
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-label">
+        <span id="progress-text">Encoding...</span>
+        <span id="progress-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    </div>
+
+    <div class="result-box" id="result-box">
+      <p>✓ Ready to download</p>
+      <button class="btn-download-result" id="download-btn" onclick="downloadResult()">↓ Download clip</button>
+    </div>
+
+    <div class="error-box" id="error-box"></div>
+
   </div>
 </div>
 
 <script>
-  let currentPath = null;
+  let trimPath = null;
+  let trimDuration = 30;
+  let trimQuality = 'original';
+  let resultFilename = null;
+  let pollTimer = null;
+
+  const qualityDescs = {
+    original: 'Full quality, instant — same as source',
+    medium: '30fps, compressed H264 — good for sharing',
+    low: '24fps, 640px wide, small file — fast download'
+  };
+
+  function setDuration(val, el) {
+    trimDuration = val;
+    document.querySelectorAll('#duration-pills .pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+  }
+
+  function setQuality(val, el) {
+    trimQuality = val;
+    document.querySelectorAll('#quality-pills .pill').forEach(p => p.classList.remove('q-active'));
+    el.classList.add('q-active');
+    document.getElementById('quality-desc').textContent = qualityDescs[val];
+  }
 
   async function loadVideos() {
     const res = await fetch('/api/videos');
     const videos = await res.json();
-    const list = document.getElementById('video-list');
     document.getElementById('subtitle').textContent =
       `${videos.length} video${videos.length !== 1 ? 's' : ''} on SD card`;
 
+    const list = document.getElementById('video-list');
     if (videos.length === 0) {
       list.innerHTML = '<div class="empty">No videos found on SD card</div>';
       return;
@@ -93,80 +185,133 @@
 
     list.innerHTML = videos.map(v => `
       <div class="video-card">
-        <div class="video-info">
-          <div class="video-name">${v.name}</div>
-          <div class="video-meta">${v.size_mb} MB</div>
+        <div class="thumb-wrap" onclick="openPlayer('${v.path}', '${v.name}')">
+          <img src="/api/thumbnail/${v.path}"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+               alt="">
+          <div class="thumb-placeholder" style="display:none">No preview</div>
+          <div class="play-icon">▶</div>
         </div>
-        <div class="video-actions">
-          <button class="btn btn-play" onclick="openVideo('${v.path}', '${v.name}')">▶ Play</button>
-          <button class="btn btn-download" onclick="downloadVideo('${v.path}')">↓ Download</button>
-          <button class="btn btn-edit" onclick="openEdit('${v.path}', '${v.name}')">✂ Trim</button>
+        <div class="card-body">
+          <div>
+            <div class="video-name">${v.name}</div>
+            <div class="video-meta">${v.size_mb} MB</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-play" onclick="openPlayer('${v.path}', '${v.name}')">▶ Play</button>
+            <button class="btn btn-trim" onclick="openTrim('${v.path}', '${v.name}')">✂ Trim</button>
+            <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
+          </div>
         </div>
       </div>
     `).join('');
   }
 
-  function openVideo(path, name) {
-    currentPath = path;
-    document.getElementById('modal-title').textContent = name;
-    document.getElementById('modal-video').src = '/api/stream/' + path;
-    document.getElementById('modal').classList.add('open');
-    hideStatus();
+  function openPlayer(path, name) {
+    document.getElementById('player-title').textContent = name;
+    document.getElementById('player-video').src = '/api/stream/' + path;
+    document.getElementById('player-modal').classList.add('open');
   }
 
-  function openEdit(path, name) {
-    openVideo(path, name);
-    setTimeout(() => {
-      document.querySelector('.edit-panel').scrollIntoView({ behavior: 'smooth' });
-    }, 300);
+  function closePlayer() {
+    document.getElementById('player-modal').classList.remove('open');
+    document.getElementById('player-video').pause();
+    document.getElementById('player-video').src = '';
   }
 
-  function closeModal() {
-    document.getElementById('modal').classList.remove('open');
-    document.getElementById('modal-video').pause();
-    document.getElementById('modal-video').src = '';
-    currentPath = null;
+  function openTrim(path, name) {
+    trimPath = path;
+    document.getElementById('trim-title').textContent = name;
+    document.getElementById('trim-start').value = 0;
+    document.getElementById('trim-btn').disabled = false;
+    document.getElementById('progress-wrap').classList.remove('show');
+    document.getElementById('result-box').classList.remove('show');
+    document.getElementById('error-box').classList.remove('show');
+    document.getElementById('progress-fill').style.width = '0%';
+    resultFilename = null;
+    document.getElementById('trim-modal').classList.add('open');
   }
 
-  function downloadVideo(path) {
+  function closeTrim() {
+    document.getElementById('trim-modal').classList.remove('open');
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    trimPath = null;
+  }
+
+  function downloadOriginal(path) {
     window.location = '/api/download/' + path;
   }
 
-  function showStatus(msg, type) {
-    const s = document.getElementById('status');
-    s.textContent = msg;
-    s.className = 'status show ' + type;
-    s.onclick = null;
-    s.style.cursor = 'default';
+  function downloadResult() {
+    if (resultFilename) window.location = '/api/output/' + resultFilename;
   }
 
-  function hideStatus() {
-    document.getElementById('status').className = 'status';
-  }
-
-  async function trimVideo() {
-    if (!currentPath) return;
+  async function startTrim() {
+    if (!trimPath) return;
     const start = parseFloat(document.getElementById('trim-start').value) || 0;
-    const end = parseFloat(document.getElementById('trim-end').value) || null;
-    if (end && end <= start) {
-      showStatus('End must be greater than start', 'error');
-      return;
+
+    document.getElementById('trim-btn').disabled = true;
+    document.getElementById('result-box').classList.remove('show');
+    document.getElementById('error-box').classList.remove('show');
+    document.getElementById('progress-wrap').classList.add('show');
+    document.getElementById('progress-fill').style.width = '0%';
+    document.getElementById('progress-pct').textContent = '0%';
+
+    if (trimQuality === 'original') {
+      document.getElementById('progress-text').textContent = 'Copying (no re-encode)...';
+    } else {
+      document.getElementById('progress-text').textContent = 'Encoding — this may take a few minutes...';
     }
-    showStatus('Trimming... (this is fast, no re-encode)', 'loading');
+
     const res = await fetch('/api/trim', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ path: currentPath, start, end })
+      body: JSON.stringify({ path: trimPath, start, duration: trimDuration, quality: trimQuality })
     });
     const data = await res.json();
     if (data.error) {
-      showStatus('Error: ' + data.error, 'error');
+      showError(data.error);
       return;
     }
-    showStatus('✓ Done — tap to download trimmed clip', 'success');
-    const s = document.getElementById('status');
-    s.style.cursor = 'pointer';
-    s.onclick = () => window.location = '/api/output/' + data.output;
+
+    pollProgress(data.job_id);
+  }
+
+  function pollProgress(jobId) {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      const res = await fetch(`/api/progress/${jobId}?duration=${trimDuration}`);
+      const data = await res.json();
+
+      if (data.status === 'running' || data.status === 'queued') {
+        const pct = data.progress || 0;
+        document.getElementById('progress-fill').style.width = pct + '%';
+        document.getElementById('progress-pct').textContent = pct + '%';
+      } else if (data.status === 'done') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        document.getElementById('progress-fill').style.width = '100%';
+        document.getElementById('progress-pct').textContent = '100%';
+        resultFilename = data.output;
+        setTimeout(() => {
+          document.getElementById('progress-wrap').classList.remove('show');
+          document.getElementById('result-box').classList.add('show');
+          document.getElementById('trim-btn').disabled = false;
+        }, 400);
+      } else if (data.status === 'error') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        showError(data.error || 'Encoding failed');
+      }
+    }, 1000);
+  }
+
+  function showError(msg) {
+    document.getElementById('trim-btn').disabled = false;
+    document.getElementById('progress-wrap').classList.remove('show');
+    const box = document.getElementById('error-box');
+    box.textContent = 'Error: ' + msg;
+    box.classList.add('show');
   }
 
   loadVideos();
