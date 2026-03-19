@@ -13,20 +13,23 @@
   .video-list { padding: 12px; }
 
   .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; display: flex; }
+  .ts-card { border: 1px solid #f59e0b33; }
   .thumb-wrap { width: 120px; flex-shrink: 0; background: #111; cursor: pointer; position: relative; }
   .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb-wrap .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.2s; font-size: 28px; }
   .thumb-wrap:hover .play-icon, .thumb-wrap:active .play-icon { opacity: 1; }
   .thumb-placeholder { width: 100%; height: 100%; min-height: 80px; background: #222; display: flex; align-items: center; justify-content: center; color: #555; font-size: 11px; }
+  .ts-badge { color: #f59e0b; font-size: 16px; font-weight: 700; background: #1a1400; }
+
   .card-body { flex: 1; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; }
   .video-name { font-size: 14px; font-weight: 500; }
   .video-meta { font-size: 12px; color: #888; margin-top: 2px; }
   .card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
   .btn { padding: 7px 12px; border-radius: 8px; border: none; font-size: 12px; cursor: pointer; font-weight: 500; }
   .btn-play { background: #2563eb; color: #fff; }
+  .btn-convert { background: #b45309; color: #fff; }
   .btn-dl { background: #374151; color: #fff; }
 
-  /* Modal */
   .modal { display: none; position: fixed; inset: 0; background: #0f0f0f; z-index: 100; flex-direction: column; overflow-y: auto; }
   .modal.open { display: flex; }
   .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; position: sticky; top: 0; background: #0f0f0f; z-index: 1; border-bottom: 1px solid #222; }
@@ -34,7 +37,6 @@
   .close-btn { background: #2a2a2a; border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer; flex-shrink: 0; }
   video { width: 100%; background: #000; }
 
-  /* Trim panel */
   .trim-panel { padding: 16px; }
   .section { background: #1a1a1a; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
   .section-title { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
@@ -42,7 +44,7 @@
   .input-row { display: flex; align-items: center; gap: 10px; }
   .input-row label { font-size: 13px; color: #888; width: 44px; flex-shrink: 0; }
   .input-row input { background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 8px 10px; border-radius: 8px; flex: 1; font-size: 14px; }
-  .use-current { padding: 8px 12px; border-radius: 8px; border: none; background: #2563eb22; color: #60a5fa; font-size: 12px; cursor: pointer; border: 1px solid #2563eb44; white-space: nowrap; }
+  .use-current { padding: 8px 12px; border-radius: 8px; border: 1px solid #2563eb44; background: #2563eb22; color: #60a5fa; font-size: 12px; cursor: pointer; white-space: nowrap; }
 
   .pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
   .pill { padding: 7px 14px; border-radius: 20px; border: 1px solid #333; background: transparent; color: #888; font-size: 13px; cursor: pointer; transition: all 0.15s; }
@@ -66,8 +68,10 @@
 
   .error-box { margin-top: 12px; padding: 12px; background: #2a0f0f; border: 1px solid #4a1a1a; border-radius: 8px; font-size: 12px; color: #f87171; display: none; }
   .error-box.show { display: block; }
-  .empty { text-align: center; padding: 60px 20px; color: #555; }
+
   .divider { font-size: 11px; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.6px; padding: 4px 0 12px; }
+  .empty { text-align: center; padding: 60px 20px; color: #555; }
+  .convert-info { font-size: 13px; color: #aaa; line-height: 1.6; margin-bottom: 0; }
 </style>
 </head>
 <body>
@@ -79,7 +83,7 @@
 
 <div class="video-list" id="video-list"></div>
 
-<!-- Single modal: player + trim -->
+<!-- Player + trim modal -->
 <div class="modal" id="modal">
   <div class="modal-header">
     <span class="modal-title" id="modal-title"></span>
@@ -123,20 +127,54 @@
 
     <button class="btn-full" id="trim-btn" onclick="startTrim()">✂ Trim & Export</button>
 
-    <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-wrap" id="trim-progress-wrap">
       <div class="progress-label">
-        <span id="progress-text">Encoding...</span>
-        <span id="progress-pct">0%</span>
+        <span id="trim-progress-text">Encoding...</span>
+        <span id="trim-pct">0%</span>
       </div>
-      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-bar"><div class="progress-fill" id="trim-fill"></div></div>
     </div>
 
-    <div class="result-box" id="result-box">
+    <div class="result-box" id="trim-result">
       <p>✓ Ready to download</p>
-      <button class="btn-download-result" onclick="downloadResult()">↓ Download clip</button>
+      <button class="btn-download-result" onclick="downloadTrimResult()">↓ Download clip</button>
     </div>
 
-    <div class="error-box" id="error-box"></div>
+    <div class="error-box" id="trim-error"></div>
+  </div>
+</div>
+
+<!-- Convert modal for .ts files -->
+<div class="modal" id="convert-modal">
+  <div class="modal-header">
+    <span class="modal-title" id="convert-title"></span>
+    <button class="close-btn" onclick="closeConvert()">×</button>
+  </div>
+  <div class="trim-panel">
+    <div class="section">
+      <div class="section-title">Convert to MP4</div>
+      <p class="convert-info">
+        Converts to 640px wide, 30fps MP4 — optimised for phone viewing and sharing.
+        This will take several minutes on Pi Zero W.
+      </p>
+    </div>
+
+    <button class="btn-full" id="convert-btn" onclick="startConvert()" style="background:#b45309;">⟳ Start converting</button>
+
+    <div class="progress-wrap" id="convert-progress-wrap">
+      <div class="progress-label">
+        <span>Converting .ts → .mp4</span>
+        <span id="convert-pct">0%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="convert-fill" style="background:#b45309;"></div></div>
+    </div>
+
+    <div class="result-box" id="convert-result">
+      <p>✓ Conversion done — ready to download</p>
+      <button class="btn-download-result" onclick="downloadConvertResult()">↓ Download MP4</button>
+    </div>
+
+    <div class="error-box" id="convert-error"></div>
   </div>
 </div>
 
@@ -144,8 +182,13 @@
   let currentPath = null;
   let trimDuration = 30;
   let trimQuality = 'original';
-  let resultFilename = null;
-  let pollTimer = null;
+  let trimResultFilename = null;
+  let trimPollTimer = null;
+
+  let convertPath = null;
+  let convertResultFilename = null;
+  let convertPollTimer = null;
+  let convertDuration = 300;
 
   const qualityDescs = {
     original: 'Full quality, instant — same as source',
@@ -183,27 +226,35 @@
       return;
     }
 
-    list.innerHTML = videos.map(v => `
-      <div class="video-card">
-        <div class="thumb-wrap" onclick="openModal('${v.path}', '${v.name}')">
-          <img src="/api/thumbnail/${v.path}"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-               alt="">
-          <div class="thumb-placeholder" style="display:none">No preview</div>
-          <div class="play-icon">▶</div>
-        </div>
-        <div class="card-body">
-          <div>
-            <div class="video-name">${v.name}</div>
-            <div class="video-meta">${v.size_mb} MB</div>
+    list.innerHTML = videos.map(v => {
+      const isTs = v.type === 'ts';
+      return `
+        <div class="video-card ${isTs ? 'ts-card' : ''}">
+          <div class="thumb-wrap" onclick="${isTs ? `openConvert('${v.path}', '${v.name}')` : `openModal('${v.path}', '${v.name}')`}">
+            ${isTs
+              ? `<div class="thumb-placeholder ts-badge">TS</div>`
+              : `<img src="/api/thumbnail/${v.path}"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
+                 <div class="thumb-placeholder" style="display:none">No preview</div>`
+            }
+            <div class="play-icon">${isTs ? '⟳' : '▶'}</div>
           </div>
-          <div class="card-actions">
-            <button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play & Trim</button>
-            <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
+          <div class="card-body">
+            <div>
+              <div class="video-name">${v.name}</div>
+              <div class="video-meta">${v.size_mb} MB · ${isTs ? '<span style="color:#f59e0b">TS file</span>' : 'MP4'}</div>
+            </div>
+            <div class="card-actions">
+              ${isTs
+                ? `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Convert to MP4</button>`
+                : `<button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play & Trim</button>`
+              }
+              <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
+            </div>
           </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   function openModal(path, name) {
@@ -212,11 +263,11 @@
     document.getElementById('modal-video').src = '/api/stream/' + path;
     document.getElementById('trim-start').value = 0;
     document.getElementById('trim-btn').disabled = false;
-    document.getElementById('progress-wrap').classList.remove('show');
-    document.getElementById('result-box').classList.remove('show');
-    document.getElementById('error-box').classList.remove('show');
-    document.getElementById('progress-fill').style.width = '0%';
-    resultFilename = null;
+    document.getElementById('trim-progress-wrap').classList.remove('show');
+    document.getElementById('trim-result').classList.remove('show');
+    document.getElementById('trim-error').classList.remove('show');
+    document.getElementById('trim-fill').style.width = '0%';
+    trimResultFilename = null;
     document.getElementById('modal').classList.add('open');
   }
 
@@ -224,16 +275,38 @@
     document.getElementById('modal').classList.remove('open');
     document.getElementById('modal-video').pause();
     document.getElementById('modal-video').src = '';
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (trimPollTimer) { clearInterval(trimPollTimer); trimPollTimer = null; }
     currentPath = null;
+  }
+
+  function openConvert(path, name) {
+    convertPath = path;
+    document.getElementById('convert-title').textContent = name;
+    document.getElementById('convert-btn').disabled = false;
+    document.getElementById('convert-progress-wrap').classList.remove('show');
+    document.getElementById('convert-result').classList.remove('show');
+    document.getElementById('convert-error').classList.remove('show');
+    document.getElementById('convert-fill').style.width = '0%';
+    convertResultFilename = null;
+    document.getElementById('convert-modal').classList.add('open');
+  }
+
+  function closeConvert() {
+    document.getElementById('convert-modal').classList.remove('open');
+    if (convertPollTimer) { clearInterval(convertPollTimer); convertPollTimer = null; }
+    convertPath = null;
   }
 
   function downloadOriginal(path) {
     window.location = '/api/download/' + path;
   }
 
-  function downloadResult() {
-    if (resultFilename) window.location = '/api/output/' + resultFilename;
+  function downloadTrimResult() {
+    if (trimResultFilename) window.location = '/api/output/' + trimResultFilename;
+  }
+
+  function downloadConvertResult() {
+    if (convertResultFilename) window.location = '/api/output/' + convertResultFilename;
   }
 
   async function startTrim() {
@@ -241,12 +314,12 @@
     const start = parseFloat(document.getElementById('trim-start').value) || 0;
 
     document.getElementById('trim-btn').disabled = true;
-    document.getElementById('result-box').classList.remove('show');
-    document.getElementById('error-box').classList.remove('show');
-    document.getElementById('progress-wrap').classList.add('show');
-    document.getElementById('progress-fill').style.width = '0%';
-    document.getElementById('progress-pct').textContent = '0%';
-    document.getElementById('progress-text').textContent =
+    document.getElementById('trim-result').classList.remove('show');
+    document.getElementById('trim-error').classList.remove('show');
+    document.getElementById('trim-progress-wrap').classList.add('show');
+    document.getElementById('trim-fill').style.width = '0%';
+    document.getElementById('trim-pct').textContent = '0%';
+    document.getElementById('trim-progress-text').textContent =
       trimQuality === 'original' ? 'Copying (no re-encode)...' : 'Encoding — this may take a few minutes...';
 
     const res = await fetch('/api/trim', {
@@ -255,42 +328,81 @@
       body: JSON.stringify({ path: currentPath, start, duration: trimDuration, quality: trimQuality })
     });
     const data = await res.json();
-    if (data.error) { showError(data.error); return; }
-    pollProgress(data.job_id);
+    if (data.error) { showTrimError(data.error); return; }
+    pollProgress(data.job_id, trimDuration, 'trim');
   }
 
-  function pollProgress(jobId) {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(async () => {
-      const res = await fetch(`/api/progress/${jobId}?duration=${trimDuration}`);
+  async function startConvert() {
+    if (!convertPath) return;
+    document.getElementById('convert-btn').disabled = true;
+    document.getElementById('convert-progress-wrap').classList.add('show');
+    document.getElementById('convert-fill').style.width = '0%';
+    document.getElementById('convert-pct').textContent = '0%';
+
+    const res = await fetch('/api/convert', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ path: convertPath })
+    });
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('convert-error').textContent = 'Error: ' + data.error;
+      document.getElementById('convert-error').classList.add('show');
+      document.getElementById('convert-btn').disabled = false;
+      return;
+    }
+    convertDuration = data.duration || 300;
+    pollProgress(data.job_id, convertDuration, 'convert');
+  }
+
+  function pollProgress(jobId, duration, mode) {
+    const fillEl = document.getElementById(mode === 'trim' ? 'trim-fill' : 'convert-fill');
+    const pctEl = document.getElementById(mode === 'trim' ? 'trim-pct' : 'convert-pct');
+    const resultEl = document.getElementById(mode === 'trim' ? 'trim-result' : 'convert-result');
+    const progressEl = document.getElementById(mode === 'trim' ? 'trim-progress-wrap' : 'convert-progress-wrap');
+    const errorEl = document.getElementById(mode === 'trim' ? 'trim-error' : 'convert-error');
+
+    const timer = setInterval(async () => {
+      const res = await fetch(`/api/progress/${jobId}?duration=${duration}`);
       const data = await res.json();
+
       if (data.status === 'running' || data.status === 'queued') {
         const pct = data.progress || 0;
-        document.getElementById('progress-fill').style.width = pct + '%';
-        document.getElementById('progress-pct').textContent = pct + '%';
+        fillEl.style.width = pct + '%';
+        pctEl.textContent = pct + '%';
       } else if (data.status === 'done') {
-        clearInterval(pollTimer); pollTimer = null;
-        document.getElementById('progress-fill').style.width = '100%';
-        document.getElementById('progress-pct').textContent = '100%';
-        resultFilename = data.output;
+        clearInterval(timer);
+        fillEl.style.width = '100%';
+        pctEl.textContent = '100%';
+        if (mode === 'trim') {
+          trimResultFilename = data.output;
+          if (trimPollTimer === timer) trimPollTimer = null;
+        } else {
+          convertResultFilename = data.output;
+          if (convertPollTimer === timer) convertPollTimer = null;
+        }
         setTimeout(() => {
-          document.getElementById('progress-wrap').classList.remove('show');
-          document.getElementById('result-box').classList.add('show');
-          document.getElementById('trim-btn').disabled = false;
+          progressEl.classList.remove('show');
+          resultEl.classList.add('show');
+          document.getElementById(mode === 'trim' ? 'trim-btn' : 'convert-btn').disabled = false;
         }, 400);
       } else if (data.status === 'error') {
-        clearInterval(pollTimer); pollTimer = null;
-        showError(data.error || 'Encoding failed');
+        clearInterval(timer);
+        errorEl.textContent = 'Error: ' + (data.error || 'Failed');
+        errorEl.classList.add('show');
+        document.getElementById(mode === 'trim' ? 'trim-btn' : 'convert-btn').disabled = false;
       }
     }, 1000);
+
+    if (mode === 'trim') trimPollTimer = timer;
+    else convertPollTimer = timer;
   }
 
-  function showError(msg) {
+  function showTrimError(msg) {
     document.getElementById('trim-btn').disabled = false;
-    document.getElementById('progress-wrap').classList.remove('show');
-    const box = document.getElementById('error-box');
-    box.textContent = 'Error: ' + msg;
-    box.classList.add('show');
+    document.getElementById('trim-progress-wrap').classList.remove('show');
+    document.getElementById('trim-error').textContent = 'Error: ' + msg;
+    document.getElementById('trim-error').classList.add('show');
   }
 
   loadVideos();

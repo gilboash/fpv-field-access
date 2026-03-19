@@ -20,7 +20,8 @@ def get_videos():
     videos = []
     for root, dirs, files in os.walk(SD_PATH):
         for f in files:
-            if f.upper().endswith(('.MP4', '.MOV')) and not f.startswith('._'):
+            ext = os.path.splitext(f)[1].upper()
+            if ext in ('.MP4', '.MOV', '.TS') and not f.startswith('._'):
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, SD_PATH)
                 size = os.path.getsize(full)
@@ -28,8 +29,53 @@ def get_videos():
                     "name": f,
                     "path": rel,
                     "size_mb": round(size / 1024 / 1024, 1),
+                    "type": "ts" if ext == ".TS" else "video"
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
+
+
+@app.route('/api/convert', methods=['POST'])
+def convert():
+    data = request.json
+    base = os.path.splitext(os.path.basename(data['path']))[0]
+    job_id = str(uuid.uuid4())[:8]
+    out = os.path.join(WORK_DIR, f"{base}_converted_{job_id}.mp4")
+    tmp = os.path.join(WORK_DIR, f"{base}_converted_{job_id}_tmp.mp4")
+    progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
+    src = os.path.join(SD_PATH, data['path'])
+
+    # estimate duration for progress tracking
+    probe = subprocess.run(
+        ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+         '-of', 'default=noprint_wrappers=1:nokey=1', src],
+        capture_output=True, text=True
+    )
+    try:
+        duration = float(probe.stdout.strip())
+    except:
+        duration = 300  # fallback 5 min
+
+    cmd = ['ffmpeg', '-y', '-i', src,
+           '-r', '30',
+           '-vf', 'scale=640:-2',
+           '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
+           '-threads', '1',
+           '-c:a', 'aac', '-b:a', '96k',
+           '-movflags', '+faststart',
+           '-progress', progress_file,
+           tmp]
+
+    with jobs_lock:
+        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
+
+    t = threading.Thread(
+        target=run_trim_job,
+        args=(job_id, src, out, tmp, cmd, duration, progress_file),
+        daemon=True
+    )
+    t.start()
+
+    return jsonify({'job_id': job_id, 'duration': duration})
 
 def get_thumb_name(filename):
     base = os.path.splitext(filename)[0]
