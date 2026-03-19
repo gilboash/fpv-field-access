@@ -44,6 +44,7 @@ def get_proxy_name(filename):
 def generate_proxy(filepath, filename):
     proxy_name = get_proxy_name(filename)
     proxy_path = os.path.join(PROXY_DIR, proxy_name)
+    tmp_path = proxy_path + ".tmp"
 
     if os.path.exists(proxy_path):
         with proxy_lock:
@@ -64,15 +65,19 @@ def generate_proxy(filepath, filename):
         '-c:a', 'aac',
         '-b:a', '96k',
         '-movflags', '+faststart',
-        proxy_path
+        tmp_path  # write to temp first
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     with proxy_lock:
         if result.returncode == 0:
+            os.rename(tmp_path, proxy_path)  # atomic move only on success
             proxy_status[filename] = 'done'
         else:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)  # clean up failed temp
             proxy_status[filename] = 'error'
+
 
 def start_proxy_worker():
     videos = get_videos()
