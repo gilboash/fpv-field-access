@@ -4,8 +4,9 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
 
-SD_PATH = "/media/naco/3834-6662/DCIM"
-WORK_DIR = os.path.expanduser("~/picam/work")
+
+SD_PATH = "/media/naco/3834-6662/"
+WORK_DIR = os.path.expanduser("~/fpv-field-access/work")
 os.makedirs(WORK_DIR, exist_ok=True)
 
 def get_videos():
@@ -22,6 +23,7 @@ def get_videos():
                     "size_mb": round(size / 1024 / 1024, 1)
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
+
 
 @app.route('/')
 def index():
@@ -48,9 +50,10 @@ def trim():
     out = os.path.join(WORK_DIR, "trim_" + os.path.basename(data['path']))
     start = data.get('start', 0)
     end = data.get('end')
-    cmd = ['ffmpeg', '-y', '-i', src, '-ss', str(start)]
-    if end:
-        cmd += ['-to', str(end)]
+    cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src]
+    if end and float(end) > float(start):
+        duration = float(end) - float(start)
+        cmd += ['-t', str(duration)]
     cmd += ['-c', 'copy', out]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
