@@ -71,20 +71,19 @@ def download(filepath):
 @app.route('/api/trim', methods=['POST'])
 def trim():
     data = request.json
-    src = os.path.join(SD_PATH, data['path'])
-    out = os.path.join(WORK_DIR, "trim_" + os.path.basename(data['path']))
-    tmp = out + ".tmp"
+    base = os.path.splitext(os.path.basename(data['path']))[0]
+    out = os.path.join(WORK_DIR, f"trim_{base}.mp4")
+    tmp = os.path.join(WORK_DIR, f"trim_{base}_tmp.mp4")
     start = data.get('start', 0)
     end = data.get('end')
 
     if end and float(end) <= float(start):
         return jsonify({"error": "End must be greater than start"}), 400
 
-    cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src]
+    cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', os.path.join(SD_PATH, data['path'])]
     if end:
-        duration = float(end) - float(start)
-        cmd += ['-t', str(duration)]
-    cmd += ['-c', 'copy', tmp]  # no re-encode, instant cut
+        cmd += ['-t', str(float(end) - float(start))]
+    cmd += ['-c', 'copy', tmp]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode == 0:
