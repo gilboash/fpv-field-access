@@ -44,7 +44,6 @@ def convert():
     progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
     src = os.path.join(SD_PATH, data['path'])
 
-    # estimate duration for progress tracking
     probe = subprocess.run(
         ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
          '-of', 'default=noprint_wrappers=1:nokey=1', src],
@@ -53,14 +52,10 @@ def convert():
     try:
         duration = float(probe.stdout.strip())
     except:
-        duration = 300  # fallback 5 min
+        duration = 300
 
     cmd = ['ffmpeg', '-y', '-i', src,
-           '-r', '30',
-           '-vf', 'scale=640:-2',
-           '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
-           '-threads', '1',
-           '-c:a', 'aac', '-b:a', '96k',
+           '-c', 'copy',
            '-movflags', '+faststart',
            '-progress', progress_file,
            tmp]
