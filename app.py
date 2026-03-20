@@ -57,15 +57,7 @@ def convert():
 
     job_id = str(uuid.uuid4())[:8]
 
-    probe = subprocess.run(
-        ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-         '-of', 'default=noprint_wrappers=1:nokey=1', src],
-        capture_output=True, text=True
-    )
-    try:
-        duration = float(probe.stdout.strip())
-    except:
-        duration = 300
+    duration = 300
 
     cmd = ['ffmpeg', '-y', '-i', src,
            '-c', 'copy',
