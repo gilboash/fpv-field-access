@@ -25,14 +25,25 @@ def get_videos():
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, SD_PATH)
                 size = os.path.getsize(full)
+                is_ts = ext == '.TS'
+
+                # check if a converted version exists in work dir
+                converted = None
+                if is_ts:
+                    base = os.path.splitext(f)[0]
+                    for wf in os.listdir(WORK_DIR):
+                        if wf.startswith(f"{base}_converted_") and wf.endswith('.mp4'):
+                            converted = wf
+                            break
+
                 videos.append({
                     "name": f,
                     "path": rel,
                     "size_mb": round(size / 1024 / 1024, 1),
-                    "type": "ts" if ext == ".TS" else "video"
+                    "type": "ts" if is_ts else "video",
+                    "converted": converted
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
-
 
 @app.route('/api/convert', methods=['POST'])
 def convert():
@@ -138,6 +149,39 @@ def thumbnail(filepath):
             return '', 404
 
     return send_file(thumb_path, mimetype='image/jpeg')
+
+@app.route('/api/stream_output/<filename>')
+def stream_output(filename):
+    full = os.path.join(WORK_DIR, filename)
+    if not os.path.exists(full):
+        return '', 404
+    file_size = os.path.getsize(full)
+    range_header = request.headers.get('Range')
+
+    if range_header:
+        match = range_header.replace('bytes=', '').split('-')
+        byte_start = int(match[0])
+        byte_end = int(match[1]) if match[1] else file_size - 1
+        length = byte_end - byte_start + 1
+
+        def generate():
+            with open(full, 'rb') as f:
+                f.seek(byte_start)
+                remaining = length
+                while remaining:
+                    chunk = f.read(min(8192, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        rv = Response(generate(), status=206, mimetype='video/mp4')
+        rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
+        rv.headers['Accept-Ranges'] = 'bytes'
+        rv.headers['Content-Length'] = length
+        return rv
+
+    return send_file(full, mimetype='video/mp4')
 
 @app.route('/api/stream/<path:filepath>')
 def stream(filepath):
