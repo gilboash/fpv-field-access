@@ -27,33 +27,35 @@ def get_videos():
                 size = os.path.getsize(full)
                 is_ts = ext == '.TS'
 
-                # check if a converted version exists in work dir
-                converted = None
+                converted_exists = False
                 if is_ts:
                     base = os.path.splitext(f)[0]
-                    for wf in os.listdir(WORK_DIR):
-                        if wf.startswith(f"{base}_converted_") and wf.endswith('.mp4'):
-                            converted = wf
-                            break
+                    converted_exists = os.path.exists(
+                        os.path.join(root, f"{base}_converted.mp4")
+                    )
 
                 videos.append({
                     "name": f,
                     "path": rel,
                     "size_mb": round(size / 1024 / 1024, 1),
                     "type": "ts" if is_ts else "video",
-                    "converted": converted
+                    "converted": converted_exists
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
 @app.route('/api/convert', methods=['POST'])
 def convert():
     data = request.json
-    base = os.path.splitext(os.path.basename(data['path']))[0]
-    job_id = str(uuid.uuid4())[:8]
-    out = os.path.join(WORK_DIR, f"{base}_converted_{job_id}.mp4")
-    tmp = os.path.join(WORK_DIR, f"{base}_converted_{job_id}_tmp.mp4")
-    progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
     src = os.path.join(SD_PATH, data['path'])
+    base = os.path.splitext(os.path.basename(data['path']))[0]
+    src_dir = os.path.dirname(src)
+
+    # save converted file next to original on SD card
+    out = os.path.join(src_dir, f"{base}_converted.mp4")
+    tmp = os.path.join(WORK_DIR, f"{base}_converted_tmp.mp4")
+    progress_file = os.path.join(WORK_DIR, f"progress_{data['path'].replace('/', '_')}.txt")
+
+    job_id = str(uuid.uuid4())[:8]
 
     probe = subprocess.run(
         ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
@@ -72,10 +74,28 @@ def convert():
            tmp]
 
     with jobs_lock:
-        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
+        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None, 'final_path': out}
+
+    def run_convert_to_sd(job_id, src, out, tmp, cmd, duration, progress_file):
+        with jobs_lock:
+            jobs[job_id]['status'] = 'running'
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        with jobs_lock:
+            if result.returncode == 0:
+                os.rename(tmp, out)  # move from work/ to SD card
+                jobs[job_id]['status'] = 'done'
+                jobs[job_id]['progress'] = 100
+                jobs[job_id]['output'] = os.path.basename(out)
+            else:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                jobs[job_id]['status'] = 'error'
+                jobs[job_id]['error'] = result.stderr[-300:]
+        if os.path.exists(progress_file):
+            os.remove(progress_file)
 
     t = threading.Thread(
-        target=run_trim_job,
+        target=run_convert_to_sd,
         args=(job_id, src, out, tmp, cmd, duration, progress_file),
         daemon=True
     )

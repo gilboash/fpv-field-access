@@ -71,7 +71,7 @@
 
   .divider { font-size: 11px; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.6px; padding: 4px 0 12px; }
   .empty { text-align: center; padding: 60px 20px; color: #555; }
-  .convert-info { font-size: 13px; color: #aaa; line-height: 1.6; margin-bottom: 0; }
+  .convert-info { font-size: 13px; color: #aaa; line-height: 1.6; }
 </style>
 </head>
 <body>
@@ -154,8 +154,8 @@
     <div class="section">
       <div class="section-title">Convert to MP4</div>
       <p class="convert-info">
-        Converts to 640px wide, 30fps MP4 — optimised for phone viewing and sharing.
-        This will take several minutes on Pi Zero W.
+        Remuxes .ts to .mp4 — same quality, no re-encode. Saves back to SD card.
+        Usually done in seconds.
       </p>
     </div>
 
@@ -170,8 +170,8 @@
     </div>
 
     <div class="result-box" id="convert-result">
-      <p>✓ Conversion done — ready to download</p>
-      <button class="btn-download-result" onclick="downloadConvertResult()">↓ Download MP4</button>
+      <p>✓ Saved to SD card — find it in the main list</p>
+      <button class="btn-download-result" onclick="closeConvert()">← Back to list</button>
     </div>
 
     <div class="error-box" id="convert-error"></div>
@@ -186,7 +186,6 @@
   let trimPollTimer = null;
 
   let convertPath = null;
-  let convertResultFilename = null;
   let convertPollTimer = null;
   let convertDuration = 300;
 
@@ -227,70 +226,47 @@
     }
 
     list.innerHTML = videos.map(v => {
-    const isTs = v.type === 'ts';
-    const hasConverted = isTs && v.converted;
-
-    return `
+      const isTs = v.type === 'ts';
+      const hasConverted = isTs && v.converted;
+      return `
         <div class="video-card ${isTs ? 'ts-card' : ''}">
-        <div class="thumb-wrap" onclick="${
-            hasConverted
-            ? `openOutputModal('${v.converted}', '${v.name} (converted)')`
-            : isTs
-                ? `openConvert('${v.path}', '${v.name}')`
-                : `openModal('${v.path}', '${v.name}')`
-        }">
+          <div class="thumb-wrap" onclick="${isTs ? `openConvert('${v.path}', '${v.name}')` : `openModal('${v.path}', '${v.name}')`}">
             ${isTs
-            ? `<div class="thumb-placeholder ts-badge">${hasConverted ? 'MP4' : 'TS'}</div>`
-            : `<img src="/api/thumbnail/${v.path}"
-                    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
-                <div class="thumb-placeholder" style="display:none">No preview</div>`
+              ? `<div class="thumb-placeholder ts-badge">TS</div>`
+              : `<img src="/api/thumbnail/${v.path}"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
+                 <div class="thumb-placeholder" style="display:none">No preview</div>`
             }
-            <div class="play-icon">${hasConverted ? '▶' : isTs ? '⟳' : '▶'}</div>
-        </div>
-        <div class="card-body">
+            <div class="play-icon">${isTs ? '⟳' : '▶'}</div>
+          </div>
+          <div class="card-body">
             <div>
-            <div class="video-name">${v.name}</div>
-            <div class="video-meta">
+              <div class="video-name">${v.name}</div>
+              <div class="video-meta">
                 ${v.size_mb} MB ·
                 ${isTs
-                ? hasConverted
-                    ? '<span style="color:#4ade80">✓ Converted</span>'
+                  ? hasConverted
+                    ? '<span style="color:#4ade80">✓ MP4 ready</span>'
                     : '<span style="color:#f59e0b">TS file</span>'
-                : 'MP4'
+                  : 'MP4'
                 }
-            </div>
+              </div>
             </div>
             <div class="card-actions">
-            ${isTs
+              ${isTs
                 ? hasConverted
-                ? `<button class="btn btn-play" onclick="openOutputModal('${v.converted}', '${v.name} (converted)')">▶ Play MP4</button>
-                    <button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Re-convert</button>`
-                : `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Convert to MP4</button>`
+                  ? `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Re-convert</button>`
+                  : `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Convert to MP4</button>`
                 : `<button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play & Trim</button>`
-            }
-            <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
+              }
+              <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
             </div>
+          </div>
         </div>
-        </div>
-    `;
+      `;
     }).join('');
   }
 
-
-  function openOutputModal(filename, name) {
-    currentPath = null; // no trim for converted files for now
-    document.getElementById('modal-title').textContent = name;
-    document.getElementById('modal-video').src = '/api/stream_output/' + filename;
-    document.getElementById('trim-start').value = 0;
-    document.getElementById('trim-btn').disabled = true;
-    document.getElementById('trim-progress-wrap').classList.remove('show');
-    document.getElementById('trim-result').classList.remove('show');
-    document.getElementById('trim-error').classList.remove('show');
-    document.getElementById('trim-fill').style.width = '0%';
-    trimResultFilename = null;
-    document.getElementById('modal').classList.add('open');
-   }
-  
   function openModal(path, name) {
     currentPath = path;
     document.getElementById('modal-title').textContent = name;
@@ -321,7 +297,6 @@
     document.getElementById('convert-result').classList.remove('show');
     document.getElementById('convert-error').classList.remove('show');
     document.getElementById('convert-fill').style.width = '0%';
-    convertResultFilename = null;
     document.getElementById('convert-modal').classList.add('open');
   }
 
@@ -329,6 +304,7 @@
     document.getElementById('convert-modal').classList.remove('open');
     if (convertPollTimer) { clearInterval(convertPollTimer); convertPollTimer = null; }
     convertPath = null;
+    loadVideos(); // refresh list so converted file appears
   }
 
   function downloadOriginal(path) {
@@ -337,10 +313,6 @@
 
   function downloadTrimResult() {
     if (trimResultFilename) window.location = '/api/output/' + trimResultFilename;
-  }
-
-  function downloadConvertResult() {
-    if (convertResultFilename) window.location = '/api/output/' + convertResultFilename;
   }
 
   async function startTrim() {
@@ -395,6 +367,7 @@
     const resultEl = document.getElementById(mode === 'trim' ? 'trim-result' : 'convert-result');
     const progressEl = document.getElementById(mode === 'trim' ? 'trim-progress-wrap' : 'convert-progress-wrap');
     const errorEl = document.getElementById(mode === 'trim' ? 'trim-error' : 'convert-error');
+    const btnEl = document.getElementById(mode === 'trim' ? 'trim-btn' : 'convert-btn');
 
     const timer = setInterval(async () => {
       const res = await fetch(`/api/progress/${jobId}?duration=${duration}`);
@@ -409,23 +382,21 @@
         fillEl.style.width = '100%';
         pctEl.textContent = '100%';
         if (mode === 'trim') {
-            trimResultFilename = data.output;
-            if (trimPollTimer === timer) trimPollTimer = null;
+          trimResultFilename = data.output;
+          if (trimPollTimer === timer) trimPollTimer = null;
         } else {
-            convertResultFilename = data.output;
-            if (convertPollTimer === timer) convertPollTimer = null;
-            loadVideos(); // refresh card to show converted status
+          if (convertPollTimer === timer) convertPollTimer = null;
         }
         setTimeout(() => {
-            progressEl.classList.remove('show');
-            resultEl.classList.add('show');
-            document.getElementById(mode === 'trim' ? 'trim-btn' : 'convert-btn').disabled = false;
+          progressEl.classList.remove('show');
+          resultEl.classList.add('show');
+          btnEl.disabled = false;
         }, 400);
-       } else if (data.status === 'error') {
+      } else if (data.status === 'error') {
         clearInterval(timer);
         errorEl.textContent = 'Error: ' + (data.error || 'Failed');
         errorEl.classList.add('show');
-        document.getElementById(mode === 'trim' ? 'trim-btn' : 'convert-btn').disabled = false;
+        btnEl.disabled = false;
       }
     }, 1000);
 
