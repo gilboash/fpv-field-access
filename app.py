@@ -2,6 +2,7 @@ import os
 import subprocess
 import threading
 import uuid
+import shutil
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
@@ -74,7 +75,7 @@ def convert():
         result = subprocess.run(cmd, capture_output=True, text=True)
         with jobs_lock:
             if result.returncode == 0:
-                os.rename(tmp, out)  # move from work/ to SD card
+                shutil.move(tmp, out)  # handles cross-device move
                 jobs[job_id]['status'] = 'done'
                 jobs[job_id]['progress'] = 100
                 jobs[job_id]['output'] = os.path.basename(out)
