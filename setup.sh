@@ -3,6 +3,8 @@ echo "Setting up FPV Field Access..."
 
 sudo apt update
 sudo apt install -y git ffmpeg python3-flask python3-pip
+sudo apt install -y hostapd dnsmasq
+
 
 cd ~/fpv-field-access
 mkdir -p work/thumbs
