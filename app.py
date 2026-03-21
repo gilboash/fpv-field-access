@@ -282,6 +282,7 @@ def add_to_convert_queue():
 
         cmd = ['ffmpeg', '-y', '-i', src,
                '-c', 'copy',
+               '-tag:v', 'hvc1',
                '-movflags', '+faststart',
                '-progress', progress_file,
                out]
