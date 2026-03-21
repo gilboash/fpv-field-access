@@ -228,6 +228,7 @@ def trim():
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                 '-t', str(duration),
                 '-r', '30',
+                '-vf scale=1280:-2',
                 '-pix_fmt', 'yuv420p',  # required for v4l2m2m
                 '-c:v', 'h264_v4l2m2m',
                 '-b:v', '2M',
