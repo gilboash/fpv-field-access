@@ -1,7 +1,6 @@
 #!/bin/bash
 
-SD_CARD="/media/naco/3834-6662"
-CONFIG="$SD_CARD/picam.conf"
+CONFIG="/boot/firmware/picam.conf"
 LOG="/home/naco/fpv-field-access/picam.log"
 
 log() {
