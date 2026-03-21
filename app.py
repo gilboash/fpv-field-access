@@ -2,7 +2,6 @@ import os
 import subprocess
 import threading
 import uuid
-import shutil
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
@@ -44,57 +43,53 @@ def get_videos():
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
+def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
+    with jobs_lock:
+        jobs[job_id]['status'] = 'running'
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    with jobs_lock:
+        if result.returncode == 0:
+            jobs[job_id]['status'] = 'done'
+            jobs[job_id]['progress'] = 100
+            jobs[job_id]['output'] = os.path.basename(out)
+        else:
+            if os.path.exists(out):
+                os.remove(out)
+            jobs[job_id]['status'] = 'error'
+            jobs[job_id]['error'] = result.stderr[-300:]
+    if os.path.exists(progress_file):
+        os.remove(progress_file)
+
 @app.route('/api/convert', methods=['POST'])
 def convert():
     data = request.json
-    src = os.path.join(SD_PATH, data['path'])
     base = os.path.splitext(os.path.basename(data['path']))[0]
-    src_dir = os.path.dirname(src)
-
-    # save converted file next to original on SD card
-    out = os.path.join(src_dir, f"{base}_converted.mp4")
-    tmp = os.path.join(WORK_DIR, f"{base}_converted_tmp.mp4")
-    progress_file = os.path.join(WORK_DIR, f"progress_{data['path'].replace('/', '_')}.txt")
-
     job_id = str(uuid.uuid4())[:8]
-
+    src = os.path.join(SD_PATH, data['path'])
+    src_dir = os.path.dirname(src)
+    out = os.path.join(src_dir, f"{base}_converted.mp4")
+    progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
     duration = 300
 
     cmd = ['ffmpeg', '-y', '-i', src,
            '-c', 'copy',
            '-movflags', '+faststart',
            '-progress', progress_file,
-           tmp]
+           out]  # write directly to SD card, no tmp
 
     with jobs_lock:
-        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None, 'final_path': out}
-
-    def run_convert_to_sd(job_id, src, out, tmp, cmd, duration, progress_file):
-        with jobs_lock:
-            jobs[job_id]['status'] = 'running'
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        with jobs_lock:
-            if result.returncode == 0:
-                shutil.move(tmp, out)  # handles cross-device move
-                jobs[job_id]['status'] = 'done'
-                jobs[job_id]['progress'] = 100
-                jobs[job_id]['output'] = os.path.basename(out)
-            else:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
-                jobs[job_id]['status'] = 'error'
-                jobs[job_id]['error'] = result.stderr[-300:]
-        if os.path.exists(progress_file):
-            os.remove(progress_file)
+        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
 
     t = threading.Thread(
         target=run_convert_to_sd,
-        args=(job_id, src, out, tmp, cmd, duration, progress_file),
+        args=(job_id, src, out, cmd, duration, progress_file),
         daemon=True
     )
     t.start()
 
     return jsonify({'job_id': job_id, 'duration': duration})
+
+
 
 def get_thumb_name(filename):
     base = os.path.splitext(filename)[0]
