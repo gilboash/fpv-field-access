@@ -22,25 +22,7 @@ convert_queue = []
 convert_queue_lock = threading.Lock()
 queue_worker_running = False
 
-def detect_hw_encoder():
-    """Test h264_v4l2m2m with a real encode to verify it actually works"""
-    test_cmd = [
-        'ffmpeg', '-hide_banner', '-loglevel', 'error',
-        '-f', 'lavfi', '-i', 'color=black:size=320x240:rate=10',
-        '-t', '1',
-        '-c:v', 'h264_v4l2m2m',
-        '-b:v', '1M',
-        '-pix_fmt', 'yuv420p',
-        '-f', 'null', '-'
-    ]
-    result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
-    if result.returncode == 0:
-        print("Hardware encoder detected and working: h264_v4l2m2m")
-        return 'h264_v4l2m2m'
-    print("Hardware encoder unavailable or failed, using software (libx264)")
-    return 'libx264'
 
-HW_ENCODER = detect_hw_encoder()
 
 def cleanup_work_dir():
     for f in os.listdir(WORK_DIR):
@@ -223,50 +205,25 @@ def trim():
         cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                '-t', str(duration), '-c', 'copy',
                '-progress', progress_file, tmp]
-    elif quality == 'medium':
-        if HW_ENCODER == 'h264_v4l2m2m':
-            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
-                '-t', str(duration),
-                '-r', '30',
-                '-vf scale=1280:-2',
-                '-pix_fmt', 'yuv420p',  # required for v4l2m2m
-                '-c:v', 'h264_v4l2m2m',
-                '-b:v', '2M',
-                '-c:a', 'aac', '-b:a', '96k',
-                '-movflags', '+faststart',
-                '-progress', progress_file, tmp]
-        else:
-            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
-                '-t', str(duration),
-                '-r', '30',
-                '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
-                '-threads', '1',
-                '-c:a', 'aac', '-b:a', '96k',
-                '-movflags', '+faststart',
-                '-progress', progress_file, tmp]
-
-    else:
-            if HW_ENCODER == 'h264_v4l2m2m':
-                cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
-                    '-t', str(duration),
-                    '-r', '24',
-                    '-vf', 'scale=640:-2',
-                    '-pix_fmt', 'yuv420p',  # required for v4l2m2m
-                    '-c:v', 'h264_v4l2m2m',
-                    '-b:v', '1M',
-                    '-c:a', 'aac', '-b:a', '64k',
-                    '-movflags', '+faststart',
-                    '-progress', progress_file, tmp]
-            else:
-                cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
-                    '-t', str(duration),
-                    '-r', '24',
-                    '-vf', 'scale=640:-2',
-                    '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
-                    '-threads', '1',
-                    '-c:a', 'aac', '-b:a', '64k',
-                    '-movflags', '+faststart',
-                    '-progress', progress_file, tmp]
+    elif quality == 'medium':        
+        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+            '-t', str(duration),
+            '-r', '30',
+            '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
+            '-threads', '1',
+            '-c:a', 'aac', '-b:a', '96k',
+            '-movflags', '+faststart',
+            '-progress', progress_file, tmp]
+    else:            
+        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+            '-t', str(duration),
+            '-r', '24',
+            '-vf', 'scale=640:-2',
+            '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
+            '-threads', '1',
+            '-c:a', 'aac', '-b:a', '64k',
+            '-movflags', '+faststart',
+            '-progress', progress_file, tmp]
 
     with jobs_lock:
         jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
