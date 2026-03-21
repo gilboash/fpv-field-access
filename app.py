@@ -23,15 +23,21 @@ convert_queue_lock = threading.Lock()
 queue_worker_running = False
 
 def detect_hw_encoder():
-    """Check if v4l2m2m hardware encoder is available (Pi 4)"""
-    result = subprocess.run(
-        ['ffmpeg', '-hide_banner', '-encoders'],
-        capture_output=True, text=True
-    )
-    if 'h264_v4l2m2m' in result.stdout:
-        print("Hardware encoder detected: h264_v4l2m2m")
+    """Test h264_v4l2m2m with a real encode to verify it actually works"""
+    test_cmd = [
+        'ffmpeg', '-hide_banner', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', 'color=black:size=320x240:rate=10',
+        '-t', '1',
+        '-c:v', 'h264_v4l2m2m',
+        '-b:v', '1M',
+        '-pix_fmt', 'yuv420p',
+        '-f', 'null', '-'
+    ]
+    result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+    if result.returncode == 0:
+        print("Hardware encoder detected and working: h264_v4l2m2m")
         return 'h264_v4l2m2m'
-    print("No hardware encoder found, using software (libx264)")
+    print("Hardware encoder unavailable or failed, using software (libx264)")
     return 'libx264'
 
 HW_ENCODER = detect_hw_encoder()
@@ -222,6 +228,7 @@ def trim():
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                 '-t', str(duration),
                 '-r', '30',
+                '-pix_fmt', 'yuv420p',  # required for v4l2m2m
                 '-c:v', 'h264_v4l2m2m',
                 '-b:v', '2M',
                 '-c:a', 'aac', '-b:a', '96k',
@@ -243,6 +250,7 @@ def trim():
                     '-t', str(duration),
                     '-r', '24',
                     '-vf', 'scale=640:-2',
+                    '-pix_fmt', 'yuv420p',  # required for v4l2m2m
                     '-c:v', 'h264_v4l2m2m',
                     '-b:v', '1M',
                     '-c:a', 'aac', '-b:a', '64k',
