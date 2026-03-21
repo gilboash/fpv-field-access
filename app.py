@@ -2,6 +2,7 @@ import os
 import subprocess
 import threading
 import uuid
+import shutil
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
@@ -12,9 +13,27 @@ THUMB_DIR = os.path.join(WORK_DIR, "thumbs")
 os.makedirs(WORK_DIR, exist_ok=True)
 os.makedirs(THUMB_DIR, exist_ok=True)
 
-# job_id -> {'progress': 0-100, 'status': 'running'|'done'|'error', 'output': filename}
+# trim jobs
 jobs = {}
 jobs_lock = threading.Lock()
+
+# conversion queue
+convert_queue = []
+convert_queue_lock = threading.Lock()
+queue_worker_running = False
+
+def cleanup_work_dir():
+    for f in os.listdir(WORK_DIR):
+        if f.startswith('trim_') or f.startswith('progress_'):
+            try:
+                os.remove(os.path.join(WORK_DIR, f))
+            except:
+                pass
+    print("Work directory cleaned up")
+
+def get_free_space(path):
+    st = os.statvfs(path)
+    return st.f_bavail * st.f_frsize
 
 def get_videos():
     videos = []
@@ -43,54 +62,6 @@ def get_videos():
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
-def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
-    with jobs_lock:
-        jobs[job_id]['status'] = 'running'
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    with jobs_lock:
-        if result.returncode == 0:
-            jobs[job_id]['status'] = 'done'
-            jobs[job_id]['progress'] = 100
-            jobs[job_id]['output'] = os.path.basename(out)
-        else:
-            if os.path.exists(out):
-                os.remove(out)
-            jobs[job_id]['status'] = 'error'
-            jobs[job_id]['error'] = result.stderr[-300:]
-    if os.path.exists(progress_file):
-        os.remove(progress_file)
-
-@app.route('/api/convert', methods=['POST'])
-def convert():
-    data = request.json
-    base = os.path.splitext(os.path.basename(data['path']))[0]
-    job_id = str(uuid.uuid4())[:8]
-    src = os.path.join(SD_PATH, data['path'])
-    src_dir = os.path.dirname(src)
-    out = os.path.join(src_dir, f"{base}_converted.mp4")
-    progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
-    duration = 300
-
-    cmd = ['ffmpeg', '-y', '-i', src,
-           '-c', 'copy',
-           '-movflags', '+faststart',
-           '-progress', progress_file,
-           out]  # write directly to SD card, no tmp
-
-    with jobs_lock:
-        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
-
-    t = threading.Thread(
-        target=run_convert_to_sd,
-        args=(job_id, src, out, cmd, duration, progress_file),
-        daemon=True
-    )
-    t.start()
-
-    return jsonify({'job_id': job_id, 'duration': duration})
-
-
-
 def get_thumb_name(filename):
     base = os.path.splitext(filename)[0]
     return f"{base}_thumb.jpg"
@@ -112,9 +83,7 @@ def parse_ffmpeg_progress(progress_file, duration_secs):
 def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
     with jobs_lock:
         jobs[job_id]['status'] = 'running'
-
     result = subprocess.run(cmd, capture_output=True, text=True)
-
     with jobs_lock:
         if result.returncode == 0:
             os.rename(tmp, out)
@@ -126,9 +95,38 @@ def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
                 os.remove(tmp)
             jobs[job_id]['status'] = 'error'
             jobs[job_id]['error'] = result.stderr[-300:]
-
     if os.path.exists(progress_file):
         os.remove(progress_file)
+
+def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
+    with jobs_lock:
+        jobs[job_id]['status'] = 'running'
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    with jobs_lock:
+        if result.returncode == 0:
+            jobs[job_id]['status'] = 'done'
+            jobs[job_id]['progress'] = 100
+            jobs[job_id]['output'] = os.path.basename(out)
+        else:
+            if os.path.exists(out):
+                os.remove(out)
+            jobs[job_id]['status'] = 'error'
+            jobs[job_id]['error'] = result.stderr[-300:]
+    if os.path.exists(progress_file):
+        os.remove(progress_file)
+
+def queue_worker():
+    global queue_worker_running
+    while True:
+        with convert_queue_lock:
+            if not convert_queue:
+                queue_worker_running = False
+                return
+            job = convert_queue.pop(0)
+        run_convert_to_sd(
+            job['job_id'], job['src'], job['out'],
+            job['cmd'], job['duration'], job['progress_file']
+        )
 
 @app.route('/')
 def index():
@@ -143,7 +141,6 @@ def thumbnail(filepath):
     filename = os.path.basename(filepath)
     thumb_name = get_thumb_name(filename)
     thumb_path = os.path.join(THUMB_DIR, thumb_name)
-
     if not os.path.exists(thumb_path):
         src = os.path.join(SD_PATH, filepath)
         tmp = thumb_path + ".tmp.jpg"
@@ -155,55 +152,18 @@ def thumbnail(filepath):
             os.rename(tmp, thumb_path)
         else:
             return '', 404
-
     return send_file(thumb_path, mimetype='image/jpeg')
-
-@app.route('/api/stream_output/<filename>')
-def stream_output(filename):
-    full = os.path.join(WORK_DIR, filename)
-    if not os.path.exists(full):
-        return '', 404
-    file_size = os.path.getsize(full)
-    range_header = request.headers.get('Range')
-
-    if range_header:
-        match = range_header.replace('bytes=', '').split('-')
-        byte_start = int(match[0])
-        byte_end = int(match[1]) if match[1] else file_size - 1
-        length = byte_end - byte_start + 1
-
-        def generate():
-            with open(full, 'rb') as f:
-                f.seek(byte_start)
-                remaining = length
-                while remaining:
-                    chunk = f.read(min(8192, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        rv = Response(generate(), status=206, mimetype='video/mp4')
-        rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
-        rv.headers['Accept-Ranges'] = 'bytes'
-        rv.headers['Content-Length'] = length
-        return rv
-
-    return send_file(full, mimetype='video/mp4')
 
 @app.route('/api/stream/<path:filepath>')
 def stream(filepath):
     full = os.path.join(SD_PATH, filepath)
     file_size = os.path.getsize(full)
     range_header = request.headers.get('Range')
-
     if range_header:
-        byte_start = 0
         match = range_header.replace('bytes=', '').split('-')
         byte_start = int(match[0])
         byte_end = int(match[1]) if match[1] else file_size - 1
         length = byte_end - byte_start + 1
-
         def generate():
             with open(full, 'rb') as f:
                 f.seek(byte_start)
@@ -214,13 +174,11 @@ def stream(filepath):
                         break
                     remaining -= len(chunk)
                     yield chunk
-
         rv = Response(generate(), status=206, mimetype='video/mp4')
         rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
         rv.headers['Accept-Ranges'] = 'bytes'
         rv.headers['Content-Length'] = length
         return rv
-
     return send_file(full, mimetype='video/mp4')
 
 @app.route('/api/download/<path:filepath>')
@@ -232,49 +190,37 @@ def download(filepath):
 def trim():
     data = request.json
     base = os.path.splitext(os.path.basename(data['path']))[0]
-    quality = data.get('quality', 'original')  # original | medium | low
+    quality = data.get('quality', 'original')
     start = float(data.get('start', 0))
     duration = float(data.get('duration', 30))
     job_id = str(uuid.uuid4())[:8]
-
     out = os.path.join(WORK_DIR, f"trim_{base}_{quality}_{job_id}.mp4")
     tmp = os.path.join(WORK_DIR, f"trim_{base}_{quality}_{job_id}_tmp.mp4")
     progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
     src = os.path.join(SD_PATH, data['path'])
 
-    with jobs_lock:
-        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
-
     if quality == 'original':
-        cmd = ['ffmpeg', '-y',
-               '-ss', str(start), '-i', src,
-               '-t', str(duration),
-               '-c', 'copy',
-               '-progress', progress_file,
-               tmp]
+        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+               '-t', str(duration), '-c', 'copy',
+               '-progress', progress_file, tmp]
     elif quality == 'medium':
-        cmd = ['ffmpeg', '-y',
-               '-ss', str(start), '-i', src,
-               '-t', str(duration),
-               '-r', '30',
+        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+               '-t', str(duration), '-r', '30',
                '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
-               '-threads', '1',
-               '-c:a', 'aac', '-b:a', '96k',
+               '-threads', '1', '-c:a', 'aac', '-b:a', '96k',
                '-movflags', '+faststart',
-               '-progress', progress_file,
-               tmp]
-    else:  # low
-        cmd = ['ffmpeg', '-y',
-               '-ss', str(start), '-i', src,
-               '-t', str(duration),
-               '-r', '24',
+               '-progress', progress_file, tmp]
+    else:
+        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+               '-t', str(duration), '-r', '24',
                '-vf', 'scale=640:-2',
                '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
-               '-threads', '1',
-               '-c:a', 'aac', '-b:a', '64k',
+               '-threads', '1', '-c:a', 'aac', '-b:a', '64k',
                '-movflags', '+faststart',
-               '-progress', progress_file,
-               tmp]
+               '-progress', progress_file, tmp]
+
+    with jobs_lock:
+        jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
 
     t = threading.Thread(
         target=run_trim_job,
@@ -282,7 +228,6 @@ def trim():
         daemon=True
     )
     t.start()
-
     return jsonify({'job_id': job_id})
 
 @app.route('/api/progress/<job_id>')
@@ -291,10 +236,8 @@ def progress(job_id):
         job = jobs.get(job_id)
     if not job:
         return jsonify({'error': 'not found'}), 404
-
     progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
     duration = request.args.get('duration', 30, type=float)
-
     if job['status'] == 'running':
         pct = parse_ffmpeg_progress(progress_file, duration)
         return jsonify({'status': 'running', 'progress': pct})
@@ -310,5 +253,67 @@ def get_output(filename):
     path = os.path.join(WORK_DIR, filename)
     return send_file(path, as_attachment=True)
 
+@app.route('/api/convert_queue', methods=['POST'])
+def add_to_convert_queue():
+    global queue_worker_running
+    data = request.json
+    paths = data.get('paths', [])
+    job_ids = []
+
+    for path in paths:
+        src = os.path.join(SD_PATH, path)
+        base = os.path.splitext(os.path.basename(path))[0]
+        src_dir = os.path.dirname(src)
+        out = os.path.join(src_dir, f"{base}_converted.mp4")
+        job_id = str(uuid.uuid4())[:8]
+        progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
+
+        src_size = os.path.getsize(src)
+        free_space = get_free_space(src_dir)
+        if free_space < src_size * 1.1:
+            free_mb = round(free_space / 1024 / 1024)
+            needed_mb = round(src_size * 1.1 / 1024 / 1024)
+            job_ids.append({
+                'job_id': job_id,
+                'path': path,
+                'error': f"Not enough space — need {needed_mb} MB, {free_mb} MB free"
+            })
+            continue
+
+        cmd = ['ffmpeg', '-y', '-i', src,
+               '-c', 'copy',
+               '-movflags', '+faststart',
+               '-progress', progress_file,
+               out]
+
+        with jobs_lock:
+            jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None, 'path': path}
+
+        with convert_queue_lock:
+            convert_queue.append({
+                'job_id': job_id,
+                'src': src,
+                'out': out,
+                'cmd': cmd,
+                'duration': 300,
+                'progress_file': progress_file
+            })
+
+        job_ids.append({'job_id': job_id, 'path': path})
+
+    with convert_queue_lock:
+        if not queue_worker_running and convert_queue:
+            queue_worker_running = True
+            t = threading.Thread(target=queue_worker, daemon=True)
+            t.start()
+
+    return jsonify({'jobs': job_ids})
+
+@app.route('/api/queue_status')
+def queue_status():
+    with jobs_lock:
+        return jsonify(dict(jobs))
+
 if __name__ == '__main__':
+    cleanup_work_dir()
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

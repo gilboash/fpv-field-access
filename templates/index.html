@@ -10,10 +10,12 @@
   header { padding: 16px; background: #1a1a1a; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 10; }
   header h1 { font-size: 20px; font-weight: 600; }
   header p { font-size: 12px; color: #888; margin-top: 2px; }
-  .video-list { padding: 12px; }
+  .video-list { padding: 12px; padding-bottom: 80px; }
 
-  .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; display: flex; }
+  .video-card { background: #1a1a1a; border-radius: 12px; margin-bottom: 12px; overflow: hidden; display: flex; position: relative; }
   .ts-card { border: 1px solid #f59e0b33; }
+  .ts-card.selected { border-color: #f59e0b; background: #1a1a0a; }
+
   .thumb-wrap { width: 120px; flex-shrink: 0; background: #111; cursor: pointer; position: relative; }
   .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .thumb-wrap .play-icon { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.2s; font-size: 28px; }
@@ -29,7 +31,25 @@
   .btn-play { background: #2563eb; color: #fff; }
   .btn-convert { background: #b45309; color: #fff; }
   .btn-dl { background: #374151; color: #fff; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+  /* checkbox */
+  .ts-checkbox { position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; cursor: pointer; accent-color: #f59e0b; z-index: 2; }
+
+  /* convert status badge on card */
+  .conv-badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin-left: 6px; font-weight: 500; }
+  .conv-badge.queued { background: #2a2a2a; color: #888; }
+  .conv-badge.running { background: #1e3a5f; color: #60a5fa; }
+  .conv-badge.done { background: #14532d; color: #4ade80; }
+  .conv-badge.error { background: #450a0a; color: #f87171; }
+
+  /* floating convert bar */
+  .convert-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #1a1a1a; border-top: 1px solid #333; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 50; transform: translateY(100%); transition: transform 0.25s; }
+  .convert-bar.visible { transform: translateY(0); }
+  .convert-bar-label { font-size: 13px; color: #aaa; }
+  .btn-convert-all { padding: 10px 20px; border-radius: 10px; border: none; background: #b45309; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+  /* modals */
   .modal { display: none; position: fixed; inset: 0; background: #0f0f0f; z-index: 100; flex-direction: column; overflow-y: auto; }
   .modal.open { display: flex; }
   .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; position: sticky; top: 0; background: #0f0f0f; z-index: 1; border-bottom: 1px solid #222; }
@@ -40,7 +60,6 @@
   .trim-panel { padding: 16px; }
   .section { background: #1a1a1a; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
   .section-title { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
-
   .input-row { display: flex; align-items: center; gap: 10px; }
   .input-row label { font-size: 13px; color: #888; width: 44px; flex-shrink: 0; }
   .input-row input { background: #2a2a2a; border: 1px solid #444; color: #fff; padding: 8px 10px; border-radius: 8px; flex: 1; font-size: 14px; }
@@ -68,7 +87,6 @@
 
   .error-box { margin-top: 12px; padding: 12px; background: #2a0f0f; border: 1px solid #4a1a1a; border-radius: 8px; font-size: 12px; color: #f87171; display: none; }
   .error-box.show { display: block; }
-
   .divider { font-size: 11px; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.6px; padding: 4px 0 12px; }
   .empty { text-align: center; padding: 60px 20px; color: #555; }
   .convert-info { font-size: 13px; color: #aaa; line-height: 1.6; }
@@ -83,18 +101,21 @@
 
 <div class="video-list" id="video-list"></div>
 
+<!-- Floating convert bar -->
+<div class="convert-bar" id="convert-bar">
+  <span class="convert-bar-label" id="convert-bar-label">0 files selected</span>
+  <button class="btn-convert-all" onclick="convertSelected()">⟳ Convert selected</button>
+</div>
+
 <!-- Player + trim modal -->
 <div class="modal" id="modal">
   <div class="modal-header">
     <span class="modal-title" id="modal-title"></span>
     <button class="close-btn" onclick="closeModal()">×</button>
   </div>
-
   <video id="modal-video" controls playsinline></video>
-
   <div class="trim-panel">
     <div class="divider">Trim & Export</div>
-
     <div class="section">
       <div class="section-title">Start time</div>
       <div class="input-row">
@@ -103,7 +124,6 @@
         <button class="use-current" onclick="useCurrentTime()">Use current</button>
       </div>
     </div>
-
     <div class="section">
       <div class="section-title">Clip duration</div>
       <div class="pill-group" id="duration-pills">
@@ -114,7 +134,6 @@
         <button class="pill" onclick="setDuration(60, this)">60s</button>
       </div>
     </div>
-
     <div class="section">
       <div class="section-title">Quality</div>
       <div class="pill-group" id="quality-pills">
@@ -124,9 +143,7 @@
       </div>
       <div class="quality-desc" id="quality-desc">Full quality, instant — same as source</div>
     </div>
-
     <button class="btn-full" id="trim-btn" onclick="startTrim()">✂ Trim & Export</button>
-
     <div class="progress-wrap" id="trim-progress-wrap">
       <div class="progress-label">
         <span id="trim-progress-text">Encoding...</span>
@@ -134,47 +151,11 @@
       </div>
       <div class="progress-bar"><div class="progress-fill" id="trim-fill"></div></div>
     </div>
-
     <div class="result-box" id="trim-result">
       <p>✓ Ready to download</p>
       <button class="btn-download-result" onclick="downloadTrimResult()">↓ Download clip</button>
     </div>
-
     <div class="error-box" id="trim-error"></div>
-  </div>
-</div>
-
-<!-- Convert modal for .ts files -->
-<div class="modal" id="convert-modal">
-  <div class="modal-header">
-    <span class="modal-title" id="convert-title"></span>
-    <button class="close-btn" onclick="closeConvert()">×</button>
-  </div>
-  <div class="trim-panel">
-    <div class="section">
-      <div class="section-title">Convert to MP4</div>
-      <p class="convert-info">
-        Remuxes .ts to .mp4 — same quality, no re-encode. Saves back to SD card.
-        Usually done in seconds.
-      </p>
-    </div>
-
-    <button class="btn-full" id="convert-btn" onclick="startConvert()" style="background:#b45309;">⟳ Start converting</button>
-
-    <div class="progress-wrap" id="convert-progress-wrap">
-      <div class="progress-label">
-        <span>Converting .ts → .mp4</span>
-        <span id="convert-pct">0%</span>
-      </div>
-      <div class="progress-bar"><div class="progress-fill" id="convert-fill" style="background:#b45309;"></div></div>
-    </div>
-
-    <div class="result-box" id="convert-result">
-      <p>✓ Saved to SD card — find it in the main list</p>
-      <button class="btn-download-result" onclick="closeConvert()">← Back to list</button>
-    </div>
-
-    <div class="error-box" id="convert-error"></div>
   </div>
 </div>
 
@@ -185,9 +166,9 @@
   let trimResultFilename = null;
   let trimPollTimer = null;
 
-  let convertPath = null;
-  let convertPollTimer = null;
-  let convertDuration = 300;
+  // job_id -> path mapping for queue status
+  let queueJobs = {};
+  let queuePollTimer = null;
 
   const qualityDescs = {
     original: 'Full quality, instant — same as source',
@@ -213,6 +194,92 @@
     document.getElementById('trim-start').value = Math.floor(video.currentTime);
   }
 
+  // --- checkbox & convert bar ---
+  function toggleSelect(path, el) {
+    const card = el.closest('.video-card');
+    card.classList.toggle('selected', el.checked);
+    updateConvertBar();
+  }
+
+  function updateConvertBar() {
+    const checked = document.querySelectorAll('.ts-checkbox:checked');
+    const bar = document.getElementById('convert-bar');
+    const label = document.getElementById('convert-bar-label');
+    if (checked.length > 0) {
+      bar.classList.add('visible');
+      label.textContent = `${checked.length} file${checked.length > 1 ? 's' : ''} selected`;
+    } else {
+      bar.classList.remove('visible');
+    }
+  }
+
+  async function convertSelected() {
+    const checked = document.querySelectorAll('.ts-checkbox:checked');
+    const paths = Array.from(checked).map(cb => cb.dataset.path);
+    if (!paths.length) return;
+
+    // uncheck all
+    checked.forEach(cb => {
+      cb.checked = false;
+      cb.closest('.video-card').classList.remove('selected');
+    });
+    updateConvertBar();
+
+    const res = await fetch('/api/convert_queue', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ paths })
+    });
+    const data = await res.json();
+
+    // store job_id -> path mapping
+    data.jobs.forEach(j => {
+      if (!j.error) queueJobs[j.job_id] = j.path;
+    });
+
+    // show errors immediately
+    data.jobs.filter(j => j.error).forEach(j => {
+      alert(`${j.path}: ${j.error}`);
+    });
+
+    // start polling queue status
+    startQueuePoll();
+    loadVideos(); // refresh to show queued badges
+  }
+
+  function startQueuePoll() {
+    if (queuePollTimer) return;
+    queuePollTimer = setInterval(async () => {
+      const res = await fetch('/api/queue_status');
+      const statuses = await res.json();
+
+      // update badges on cards
+      Object.entries(queueJobs).forEach(([jobId, path]) => {
+        const job = statuses[jobId];
+        if (!job) return;
+        const badge = document.querySelector(`.conv-badge[data-job="${jobId}"]`);
+        if (badge) {
+          badge.className = `conv-badge ${job.status}`;
+          badge.textContent = { queued: '○ Queued', running: '⟳ Converting', done: '✓ Done', error: '✕ Error' }[job.status] || job.status;
+        }
+      });
+
+      // stop polling when all done
+      const allDone = Object.keys(queueJobs).every(id => {
+        const j = statuses[id];
+        return j && (j.status === 'done' || j.status === 'error');
+      });
+
+      if (allDone && Object.keys(queueJobs).length > 0) {
+        clearInterval(queuePollTimer);
+        queuePollTimer = null;
+        queueJobs = {};
+        loadVideos(); // refresh to show converted files
+      }
+    }, 2000);
+  }
+
+  // --- video list ---
   async function loadVideos() {
     const res = await fetch('/api/videos');
     const videos = await res.json();
@@ -225,19 +292,36 @@
       return;
     }
 
+    // get current queue status to show badges on reload
+    let statuses = {};
+    try {
+      const sr = await fetch('/api/queue_status');
+      statuses = await sr.json();
+    } catch(e) {}
+
     list.innerHTML = videos.map(v => {
       const isTs = v.type === 'ts';
       const hasConverted = isTs && v.converted;
+
+      // find active job for this path
+      const activeJob = Object.entries(statuses).find(([id, job]) => job.path === v.path && job.status !== 'done' && job.status !== 'error');
+      const jobId = activeJob ? activeJob[0] : null;
+      const jobStatus = activeJob ? activeJob[1].status : null;
+
       return `
-        <div class="video-card ${isTs ? 'ts-card' : ''}">
-          <div class="thumb-wrap" onclick="${isTs ? `openConvert('${v.path}', '${v.name}')` : `openModal('${v.path}', '${v.name}')`}">
+        <div class="video-card ${isTs ? 'ts-card' : ''}" id="card-${encodeURIComponent(v.path)}">
+          ${isTs ? `<input type="checkbox" class="ts-checkbox" data-path="${v.path}"
+            onchange="toggleSelect('${v.path}', this)"
+            ${jobStatus ? 'disabled' : ''}>` : ''}
+          <div class="thumb-wrap" onclick="${isTs ? '' : `openModal('${v.path}', '${v.name}')`}"
+            style="${isTs ? 'cursor:default' : ''}">
             ${isTs
               ? `<div class="thumb-placeholder ts-badge">TS</div>`
               : `<img src="/api/thumbnail/${v.path}"
                      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" alt="">
                  <div class="thumb-placeholder" style="display:none">No preview</div>`
             }
-            <div class="play-icon">${isTs ? '⟳' : '▶'}</div>
+            ${!isTs ? '<div class="play-icon">▶</div>' : ''}
           </div>
           <div class="card-body">
             <div>
@@ -247,7 +331,11 @@
                 ${isTs
                   ? hasConverted
                     ? '<span style="color:#4ade80">✓ MP4 ready</span>'
-                    : '<span style="color:#f59e0b">TS file</span>'
+                    : jobId
+                      ? `<span class="conv-badge ${jobStatus}" data-job="${jobId}">${
+                          {queued: '○ Queued', running: '⟳ Converting'}[jobStatus]
+                        }</span>`
+                      : '<span style="color:#f59e0b">TS file</span>'
                   : 'MP4'
                 }
               </div>
@@ -255,8 +343,10 @@
             <div class="card-actions">
               ${isTs
                 ? hasConverted
-                  ? `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Re-convert</button>`
-                  : `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')">⟳ Convert to MP4</button>`
+                  ? `<button class="btn btn-convert" onclick="reconvert('${v.path}')">⟳ Re-convert</button>`
+                  : jobStatus
+                    ? `<button class="btn btn-convert" disabled>⟳ ${jobStatus === 'running' ? 'Converting...' : 'Queued'}</button>`
+                    : ''
                 : `<button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play & Trim</button>`
               }
               <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓ Original</button>
@@ -265,6 +355,21 @@
         </div>
       `;
     }).join('');
+  }
+
+  async function reconvert(path) {
+    const res = await fetch('/api/convert_queue', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ paths: [path] })
+    });
+    const data = await res.json();
+    data.jobs.forEach(j => {
+      if (!j.error) queueJobs[j.job_id] = j.path;
+      else alert(j.error);
+    });
+    startQueuePoll();
+    loadVideos();
   }
 
   function openModal(path, name) {
@@ -289,24 +394,6 @@
     currentPath = null;
   }
 
-  function openConvert(path, name) {
-    convertPath = path;
-    document.getElementById('convert-title').textContent = name;
-    document.getElementById('convert-btn').disabled = false;
-    document.getElementById('convert-progress-wrap').classList.remove('show');
-    document.getElementById('convert-result').classList.remove('show');
-    document.getElementById('convert-error').classList.remove('show');
-    document.getElementById('convert-fill').style.width = '0%';
-    document.getElementById('convert-modal').classList.add('open');
-  }
-
-  function closeConvert() {
-    document.getElementById('convert-modal').classList.remove('open');
-    if (convertPollTimer) { clearInterval(convertPollTimer); convertPollTimer = null; }
-    convertPath = null;
-    loadVideos(); // refresh list so converted file appears
-  }
-
   function downloadOriginal(path) {
     window.location = '/api/download/' + path;
   }
@@ -318,7 +405,6 @@
   async function startTrim() {
     if (!currentPath) return;
     const start = parseFloat(document.getElementById('trim-start').value) || 0;
-
     document.getElementById('trim-btn').disabled = true;
     document.getElementById('trim-result').classList.remove('show');
     document.getElementById('trim-error').classList.remove('show');
@@ -335,73 +421,33 @@
     });
     const data = await res.json();
     if (data.error) { showTrimError(data.error); return; }
-    pollProgress(data.job_id, trimDuration, 'trim');
+    pollTrimProgress(data.job_id);
   }
 
-  async function startConvert() {
-    if (!convertPath) return;
-    document.getElementById('convert-btn').disabled = true;
-    document.getElementById('convert-progress-wrap').classList.add('show');
-    document.getElementById('convert-fill').style.width = '0%';
-    document.getElementById('convert-pct').textContent = '0%';
-
-    const res = await fetch('/api/convert', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ path: convertPath })
-    });
-    const data = await res.json();
-    if (data.error) {
-      document.getElementById('convert-error').textContent = 'Error: ' + data.error;
-      document.getElementById('convert-error').classList.add('show');
-      document.getElementById('convert-btn').disabled = false;
-      return;
-    }
-    convertDuration = data.duration || 300;
-    pollProgress(data.job_id, convertDuration, 'convert');
-  }
-
-  function pollProgress(jobId, duration, mode) {
-    const fillEl = document.getElementById(mode === 'trim' ? 'trim-fill' : 'convert-fill');
-    const pctEl = document.getElementById(mode === 'trim' ? 'trim-pct' : 'convert-pct');
-    const resultEl = document.getElementById(mode === 'trim' ? 'trim-result' : 'convert-result');
-    const progressEl = document.getElementById(mode === 'trim' ? 'trim-progress-wrap' : 'convert-progress-wrap');
-    const errorEl = document.getElementById(mode === 'trim' ? 'trim-error' : 'convert-error');
-    const btnEl = document.getElementById(mode === 'trim' ? 'trim-btn' : 'convert-btn');
-
-    const timer = setInterval(async () => {
-      const res = await fetch(`/api/progress/${jobId}?duration=${duration}`);
+  function pollTrimProgress(jobId) {
+    if (trimPollTimer) clearInterval(trimPollTimer);
+    trimPollTimer = setInterval(async () => {
+      const res = await fetch(`/api/progress/${jobId}?duration=${trimDuration}`);
       const data = await res.json();
-
       if (data.status === 'running' || data.status === 'queued') {
         const pct = data.progress || 0;
-        fillEl.style.width = pct + '%';
-        pctEl.textContent = pct + '%';
+        document.getElementById('trim-fill').style.width = pct + '%';
+        document.getElementById('trim-pct').textContent = pct + '%';
       } else if (data.status === 'done') {
-        clearInterval(timer);
-        fillEl.style.width = '100%';
-        pctEl.textContent = '100%';
-        if (mode === 'trim') {
-          trimResultFilename = data.output;
-          if (trimPollTimer === timer) trimPollTimer = null;
-        } else {
-          if (convertPollTimer === timer) convertPollTimer = null;
-        }
+        clearInterval(trimPollTimer); trimPollTimer = null;
+        document.getElementById('trim-fill').style.width = '100%';
+        document.getElementById('trim-pct').textContent = '100%';
+        trimResultFilename = data.output;
         setTimeout(() => {
-          progressEl.classList.remove('show');
-          resultEl.classList.add('show');
-          btnEl.disabled = false;
+          document.getElementById('trim-progress-wrap').classList.remove('show');
+          document.getElementById('trim-result').classList.add('show');
+          document.getElementById('trim-btn').disabled = false;
         }, 400);
       } else if (data.status === 'error') {
-        clearInterval(timer);
-        errorEl.textContent = 'Error: ' + (data.error || 'Failed');
-        errorEl.classList.add('show');
-        btnEl.disabled = false;
+        clearInterval(trimPollTimer); trimPollTimer = null;
+        showTrimError(data.error || 'Encoding failed');
       }
     }, 1000);
-
-    if (mode === 'trim') trimPollTimer = timer;
-    else convertPollTimer = timer;
   }
 
   function showTrimError(msg) {
