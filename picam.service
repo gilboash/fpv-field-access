@@ -1,0 +1,14 @@
+[Unit]
+Description=FPV Field Access
+After=network.target
+
+[Service]
+ExecStart=/bin/bash /home/naco/fpv-field-access/start.sh
+WorkingDirectory=/home/naco/fpv-field-access
+Restart=on-failure
+RestartSec=5
+User=naco
+
+[Install]
+WantedBy=multi-user.target
+
