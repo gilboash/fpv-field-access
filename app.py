@@ -161,27 +161,35 @@ def stream(filepath):
     full = os.path.join(SD_PATH, filepath)
     file_size = os.path.getsize(full)
     range_header = request.headers.get('Range')
+
     if range_header:
         match = range_header.replace('bytes=', '').split('-')
         byte_start = int(match[0])
         byte_end = int(match[1]) if match[1] else file_size - 1
         length = byte_end - byte_start + 1
+
         def generate():
             with open(full, 'rb') as f:
                 f.seek(byte_start)
                 remaining = length
                 while remaining:
-                    chunk = f.read(min(8192, remaining))
+                    chunk = f.read(min(65536, remaining))  # larger chunks for Pi 4
                     if not chunk:
                         break
                     remaining -= len(chunk)
                     yield chunk
+
         rv = Response(generate(), status=206, mimetype='video/mp4')
         rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
         rv.headers['Accept-Ranges'] = 'bytes'
         rv.headers['Content-Length'] = length
         return rv
-    return send_file(full, mimetype='video/mp4')
+
+    # no range header — return full file but tell client we support ranges
+    rv = send_file(full, mimetype='video/mp4')
+    rv.headers['Accept-Ranges'] = 'bytes'
+    rv.headers['Content-Length'] = file_size
+    return rv
 
 @app.route('/api/download/<path:filepath>')
 def download(filepath):
