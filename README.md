@@ -29,7 +29,7 @@ ExecStart=/bin/bash /home/naco/fpv-field-access/start.sh
 WorkingDirectory=/home/naco/fpv-field-access
 Restart=on-failure
 RestartSec=5
-User=naco
+User=root
 
 [Install]
 WantedBy=multi-user.target
@@ -40,3 +40,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable picam
 sudo systemctl start picam
 
+
+picam.conf on the bootfs/ sd card should be either
+mode=station
+
+or
+
+mode=hotspot
+ssid=PiCam
+password=picam1234
