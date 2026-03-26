@@ -165,7 +165,7 @@ def stream(filepath):
     if range_header:
         match = range_header.replace('bytes=', '').split('-')
         byte_start = int(match[0])
-        byte_end = int(match[1]) if match[1] else file_size - 1
+        byte_end = int(match[1]) if match[1] else min(byte_start + 10*1024*1024, file_size - 1)
         length = byte_end - byte_start + 1
 
         def generate():
@@ -173,13 +173,14 @@ def stream(filepath):
                 f.seek(byte_start)
                 remaining = length
                 while remaining:
-                    chunk = f.read(min(8192, remaining))
+                    chunk = f.read(min(65536, remaining))
                     if not chunk:
                         break
                     remaining -= len(chunk)
                     yield chunk
 
-        rv = Response(generate(), status=206, mimetype='video/mp4')
+        rv = Response(generate(), status=206, mimetype='video/mp4',
+                     direct_passthrough=True)
         rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
         rv.headers['Accept-Ranges'] = 'bytes'
         rv.headers['Content-Length'] = length
