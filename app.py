@@ -7,7 +7,7 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
 
-SD_PATH = "/media/naco/3834-6662"
+SD_PATH = "/media/naco/3834-66621"
 WORK_DIR = os.path.expanduser("~/fpv-field-access/work")
 THUMB_DIR = os.path.join(WORK_DIR, "thumbs")
 os.makedirs(WORK_DIR, exist_ok=True)
