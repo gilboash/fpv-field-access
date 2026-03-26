@@ -173,7 +173,7 @@ def stream(filepath):
                 f.seek(byte_start)
                 remaining = length
                 while remaining:
-                    chunk = f.read(min(65536, remaining))  # larger chunks for Pi 4
+                    chunk = f.read(min(8192, remaining))
                     if not chunk:
                         break
                     remaining -= len(chunk)
@@ -185,11 +185,7 @@ def stream(filepath):
         rv.headers['Content-Length'] = length
         return rv
 
-    # no range header — return full file but tell client we support ranges
-    rv = send_file(full, mimetype='video/mp4')
-    rv.headers['Accept-Ranges'] = 'bytes'
-    rv.headers['Content-Length'] = file_size
-    return rv
+    return send_file(full, mimetype='video/mp4')
 
 @app.route('/api/download/<path:filepath>')
 def download(filepath):
