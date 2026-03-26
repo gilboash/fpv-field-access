@@ -140,6 +140,7 @@ def list_videos():
 
 @app.route('/api/thumbnail/<path:filepath>')
 def thumbnail(filepath):
+    return '', 404
     filename = os.path.basename(filepath)
     thumb_name = get_thumb_name(filename)
     thumb_path = os.path.join(THUMB_DIR, thumb_name)
