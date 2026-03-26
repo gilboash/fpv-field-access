@@ -49,4 +49,6 @@ log "Hotspot up at $AP_IP"
 # start app
 log "Starting FPV Field Access..."
 cd /home/naco/fpv-field-access
-exec /usr/bin/python3 app.py >> "$LOG" 2>&1
+
+# with this:
+exec gunicorn --workers 4 --bind 0.0.0.0:5000 --timeout 300 app:app >> "$LOG" 2>&1
