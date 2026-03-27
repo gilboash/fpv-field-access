@@ -326,7 +326,7 @@ def trim():
 
     if quality == 'original':
         cmd = ['ffmpeg', '-y', 
-               '-readrate', '4.0',
+               '-readrate', '3.0',
                '-ss', str(start), '-i', src,
                '-t', str(duration), '-c', 'copy',
                '-progress', progress_file, tmp]
