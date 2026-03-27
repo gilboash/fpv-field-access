@@ -92,10 +92,11 @@
   }
   .card-meta {
     font-size: 10px; color: #555; margin-top: 2px;
-    display: flex; align-items: center; gap: 4px;
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
   }
   .ts-dot { color: #f59e0b; }
   .converted-dot { color: #4ade80; }
+  .large-dot { color: #f59e0b; }
 
   .card-actions {
     display: flex; gap: 5px;
@@ -202,6 +203,12 @@
   .pill.q-active { border-color: #1d4ed8; background: #1d4ed822; color: #60a5fa; }
   .quality-desc { font-size: 11px; color: #444; margin-top: 8px; }
 
+  .large-file-notice {
+    font-size: 11px; color: #f59e0b;
+    background: #1a1200; border: 1px solid #f59e0b33;
+    border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;
+  }
+
   .btn-full {
     width: 100%; padding: 13px; border-radius: 10px;
     border: none; font-size: 14px; font-weight: 600;
@@ -288,6 +295,11 @@
   <video id="modal-video" controls playsinline></video>
   <div class="trim-panel">
     <div class="divider">Trim & Export</div>
+
+    <div id="large-file-notice" class="large-file-notice" style="display:none">
+      Large file — max 30s trim, original quality only
+    </div>
+
     <div class="section">
       <div class="section-title">Start time</div>
       <div class="input-row">
@@ -303,15 +315,15 @@
         <button class="pill" onclick="setDuration(10, this)">10s</button>
         <button class="pill" onclick="setDuration(15, this)">15s</button>
         <button class="pill dur-active" onclick="setDuration(30, this)">30s</button>
-        <button class="pill" onclick="setDuration(60, this)">60s</button>
+        <button class="pill" id="pill-60" onclick="setDuration(60, this)">60s</button>
       </div>
     </div>
-    <div class="section">
+    <div class="section" id="quality-section">
       <div class="section-title">Quality</div>
       <div class="pill-group" id="quality-pills">
         <button class="pill q-active" onclick="setQuality('original', this)">Original</button>
-        <button class="pill" onclick="setQuality('medium', this)">Medium</button>
-        <button class="pill" onclick="setQuality('low', this)">Low</button>
+        <button class="pill" id="quality-medium" onclick="setQuality('medium', this)">Medium</button>
+        <button class="pill" id="quality-low" onclick="setQuality('low', this)">Low</button>
       </div>
       <div class="quality-desc" id="quality-desc">Full quality, instant — same as source</div>
     </div>
@@ -352,7 +364,7 @@
     </div>
     <div class="result-box" id="convert-result">
       <p>✓ Converted — ready to play or download</p>
-      <button class="btn-download-result" id="convert-download-btn" onclick="downloadConverted()">↓ Download MP4</button>
+      <button class="btn-download-result" onclick="downloadConverted()">↓ Download MP4</button>
       <button class="btn-download-result" style="background:#1d4ed8;margin-top:6px;" onclick="playConverted()">▶ Play MP4</button>
       <button class="btn-download-result" style="background:#374151;margin-top:6px;" onclick="closeConvert()">← Back to list</button>
     </div>
@@ -362,6 +374,7 @@
 
 <script>
   let currentPath = null;
+  let currentLarge = false;
   let trimDuration = 30;
   let trimQuality = 'original';
   let trimResultFilename = null;
@@ -382,12 +395,14 @@
   };
 
   function setDuration(val, el) {
+    if (currentLarge && val > 30) return; // block >30s for large files
     trimDuration = val;
     document.querySelectorAll('#duration-pills .pill').forEach(p => p.classList.remove('dur-active'));
     el.classList.add('dur-active');
   }
 
   function setQuality(val, el) {
+    if (currentLarge && val !== 'original') return; // block non-original for large files
     trimQuality = val;
     document.querySelectorAll('#quality-pills .pill').forEach(p => p.classList.remove('q-active'));
     el.classList.add('q-active');
@@ -397,6 +412,47 @@
   function useCurrentTime() {
     const video = document.getElementById('modal-video');
     document.getElementById('trim-start').value = Math.floor(video.currentTime);
+  }
+
+  function applyLargeFileMode(large) {
+    const notice = document.getElementById('large-file-notice');
+    const pill60 = document.getElementById('pill-60');
+    const medBtn = document.getElementById('quality-medium');
+    const lowBtn = document.getElementById('quality-low');
+
+    if (large) {
+      notice.style.display = 'block';
+      pill60.style.opacity = '0.3';
+      pill60.style.pointerEvents = 'none';
+      medBtn.style.opacity = '0.3';
+      medBtn.style.pointerEvents = 'none';
+      lowBtn.style.opacity = '0.3';
+      lowBtn.style.pointerEvents = 'none';
+
+      // force original quality
+      trimQuality = 'original';
+      document.querySelectorAll('#quality-pills .pill').forEach(p => p.classList.remove('q-active'));
+      document.querySelector('#quality-pills .pill:first-child').classList.add('q-active');
+      document.getElementById('quality-desc').textContent = 'Large file — original quality only (instant copy)';
+
+      // force max 30s duration
+      if (trimDuration > 30) {
+        trimDuration = 30;
+        document.querySelectorAll('#duration-pills .pill').forEach(p => p.classList.remove('dur-active'));
+        document.querySelectorAll('#duration-pills .pill').forEach(p => {
+          if (p.textContent === '30s') p.classList.add('dur-active');
+        });
+      }
+    } else {
+      notice.style.display = 'none';
+      pill60.style.opacity = '';
+      pill60.style.pointerEvents = '';
+      medBtn.style.opacity = '';
+      medBtn.style.pointerEvents = '';
+      lowBtn.style.opacity = '';
+      lowBtn.style.pointerEvents = '';
+      document.getElementById('quality-desc').textContent = qualityDescs[trimQuality];
+    }
   }
 
   function setConversionBusy(busy) {
@@ -504,6 +560,7 @@
       const isTs = v.type === 'ts';
       const hasConverted = isTs && v.converted;
       const convFile = v.converted_file || null;
+      const isLarge = v.large || false;
       const activeJob = Object.entries(statuses).find(([id, job]) =>
         job.path === v.path && job.status !== 'done' && job.status !== 'error'
       );
@@ -514,7 +571,7 @@
         ? `openConvertedModal('${convFile}', '${v.name}')`
         : isTs
           ? `openConvert('${v.path}', '${v.name}')`
-          : `openModal('${v.path}', '${v.name}')`;
+          : `openModal('${v.path}', '${v.name}', ${isLarge})`;
 
       return `
         <div class="video-card ${isTs ? 'ts-card' : ''}" id="card-${encodeURIComponent(v.path)}">
@@ -536,6 +593,7 @@
             <div class="card-name">${v.name}</div>
             <div class="card-meta">
               ${v.size_mb} MB
+              ${isLarge ? '<span class="large-dot">· large</span>' : ''}
               ${isTs
                 ? hasConverted
                   ? '<span class="converted-dot">· ✓ mp4 ready</span>'
@@ -557,7 +615,7 @@
                 : jobStatus
                   ? `<button class="btn btn-convert" disabled>⟳ ${jobStatus === 'running' ? 'Converting' : 'Queued'}</button>`
                   : `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')" ${isBusy ? 'disabled' : ''}>⟳ Convert</button>`
-              : `<button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play</button>`
+              : `<button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}', ${isLarge})">▶ Play</button>`
             }
             <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓</button>
           </div>
@@ -568,8 +626,9 @@
     observeThumbs();
   }
 
-  function openModal(path, name) {
+  function openModal(path, name, large = false) {
     currentPath = path;
+    currentLarge = large;
     document.getElementById('modal-title').textContent = name;
     document.getElementById('modal-video').src = '/api/stream/' + path;
     document.getElementById('trim-start').value = 0;
@@ -579,11 +638,13 @@
     document.getElementById('trim-error').classList.remove('show');
     document.getElementById('trim-fill').style.width = '0%';
     trimResultFilename = null;
+    applyLargeFileMode(large);
     document.getElementById('modal').classList.add('open');
   }
 
   function openConvertedModal(filename, name) {
     currentPath = null;
+    currentLarge = false;
     document.getElementById('modal-title').textContent = name + ' (MP4)';
     document.getElementById('modal-video').src = '/api/stream_converted/' + filename;
     document.getElementById('trim-start').value = 0;
@@ -593,6 +654,7 @@
     document.getElementById('trim-error').classList.remove('show');
     document.getElementById('trim-fill').style.width = '0%';
     trimResultFilename = null;
+    applyLargeFileMode(false);
     document.getElementById('modal').classList.add('open');
   }
 
@@ -602,6 +664,7 @@
     document.getElementById('modal-video').src = '';
     if (trimPollTimer) { clearInterval(trimPollTimer); trimPollTimer = null; }
     currentPath = null;
+    currentLarge = false;
   }
 
   function openConvert(path, name) {
@@ -635,8 +698,9 @@
 
   function playConverted() {
     if (convertedFilename) {
+      const name = document.getElementById('convert-title').textContent;
       closeConvert();
-      openConvertedModal(convertedFilename, document.getElementById('convert-title').textContent);
+      openConvertedModal(convertedFilename, name);
     }
   }
 
@@ -673,12 +737,7 @@
       const data = await res.json();
       if (data.error) {
         clearInterval(trimPollTimer); trimPollTimer = null;
-
-        const msg = data.error || 'Failed';
-        const isOom = msg.includes('memory') || msg.includes('killed') || msg.includes('139');
-        showTrimError(isOom
-        ? 'Not enough memory for re-encoding. Use Original quality for large files.'
-        : msg);
+        showTrimError('Job lost — app was restarted. Please try again.');
         return;
       }
       if (data.status === 'running' || data.status === 'queued') {
