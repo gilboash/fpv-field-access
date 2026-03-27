@@ -642,20 +642,8 @@
     document.getElementById('modal').classList.add('open');
   }
 
-  function openConvertedModal(filename, name) {
-    currentPath = null;
-    currentLarge = false;
-    document.getElementById('modal-title').textContent = name + ' (MP4)';
-    document.getElementById('modal-video').src = '/api/stream_converted/' + filename;
-    document.getElementById('trim-start').value = 0;
-    document.getElementById('trim-btn').disabled = true;
-    document.getElementById('trim-progress-wrap').classList.remove('show');
-    document.getElementById('trim-result').classList.remove('show');
-    document.getElementById('trim-error').classList.remove('show');
-    document.getElementById('trim-fill').style.width = '0%';
-    trimResultFilename = null;
-    applyLargeFileMode(false);
-    document.getElementById('modal').classList.add('open');
+  function openConvertedModal(filepath, name) {
+    openModal(filepath, name, false);
   }
 
   function closeModal() {
