@@ -451,15 +451,29 @@
   }
 
   async function loadVideos() {
-    const res = await fetch('/api/videos');
-    const videos = await res.json();
+    let videos = [];
+    try {
+        const res = await fetch('/api/videos');
+        videos = await res.json();
+    } catch(e) {
+        document.getElementById('subtitle').textContent = 'Connection lost — retrying...';
+        document.getElementById('video-grid').innerHTML =
+            '<div class="empty" style="grid-column:span 2">Lost connection to device...</div>';
+        setTimeout(loadVideos, 3000);
+        return;
+    }
 
     if (videos.length === 0) {
-      document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
-      document.getElementById('video-grid').innerHTML =
-        '<div class="empty" style="grid-column:span 2">Looking for SD card...</div>';
-      setTimeout(loadVideos, 3000);
-      return;
+        document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
+        document.getElementById('video-grid').innerHTML = `
+            <div class="empty" style="grid-column:span 2">
+                <div style="margin-bottom:12px">Looking for SD card...</div>
+                <button class="btn btn-play" onclick="loadVideos()" style="font-size:12px;">
+                    Retry now
+                </button>
+            </div>`;
+        setTimeout(loadVideos, 5000);
+        return;
     }
 
     lastVideoCount = videos.length;

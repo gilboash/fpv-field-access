@@ -137,25 +137,45 @@ def conversion_busy():
     with convert_queue_lock:
         busy = queue_worker_running or len(convert_queue) > 0
     return jsonify({'busy': busy})
-    
+
 def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
     global thumb_paused
+    tmp = out + ".tmp.mp4"
+    cmd = cmd[:-1] + [tmp]
+
     with jobs_lock:
         jobs[job_id]['status'] = 'running'
+
+    # check source still accessible before starting
+    if not os.path.exists(src):
+        with jobs_lock:
+            jobs[job_id]['status'] = 'error'
+            jobs[job_id]['error'] = 'SD card not accessible'
+        thumb_paused = False
+        return
+
     result = subprocess.run(cmd, capture_output=True, text=True)
     with jobs_lock:
-        if result.returncode == 0:
+        if result.returncode == 0 and os.path.exists(tmp):
+            try:
+                os.rename(tmp, out)
+            except:
+                import shutil
+                shutil.copy2(tmp, out)
+                os.remove(tmp)
             jobs[job_id]['status'] = 'done'
             jobs[job_id]['progress'] = 100
             jobs[job_id]['output'] = os.path.basename(out)
         else:
             try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
                 if os.path.exists(out):
                     os.remove(out)
             except:
                 pass
             jobs[job_id]['status'] = 'error'
-            jobs[job_id]['error'] = result.stderr[-300:]
+            jobs[job_id]['error'] = 'SD card lost during conversion' if not os.path.exists(src) else result.stderr[-300:]
     if os.path.exists(progress_file):
         os.remove(progress_file)
     thumb_paused = False

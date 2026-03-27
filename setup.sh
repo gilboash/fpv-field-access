@@ -46,6 +46,11 @@ ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_TYPE}=="vfat|exfat", ENV{UDISKS_AUT
 EOF
 sudo udevadm control --reload-rules
 
+
+# disable USB autosuspend
+echo 'SUBSYSTEM=="usb", ATTR{power/autosuspend}="-1"' | sudo tee /etc/udev/rules.d/99-usb-autosuspend.rules
+sudo udevadm control --reload-rules
+
 echo "=== Setup complete. Rebooting in 5 seconds ==="
 sleep 5
 sudo reboot
