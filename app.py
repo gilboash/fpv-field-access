@@ -106,7 +106,7 @@ def get_videos(sd_path):
                     "large": size_mb > 1024
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
-    
+
 def get_thumb_name(filename):
     base = os.path.splitext(filename)[0]
     return f"{base}_thumb.jpg"
@@ -446,7 +446,6 @@ def add_to_convert_queue():
     job_ids = []
 
     for path in paths:
-        for path in paths:
         src = os.path.join(sd, path)
         base = os.path.splitext(os.path.basename(path))[0]
         src_dir = os.path.dirname(src)
