@@ -39,6 +39,13 @@ password=picam1234
 EOF
 fi
 
+# add this section to setup.sh
+echo "Setting up SD card udev rule..."
+sudo tee /etc/udev/rules.d/99-sdcard-keep.rules << 'EOF'
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_TYPE}=="vfat|exfat", ENV{UDISKS_AUTO}="1", ENV{UDISKS_IGNORE}="0"
+EOF
+sudo udevadm control --reload-rules
+
 echo "=== Setup complete. Rebooting in 5 seconds ==="
 sleep 5
 sudo reboot
