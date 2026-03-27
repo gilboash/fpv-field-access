@@ -325,11 +325,13 @@ def trim():
     src = os.path.join(sd, data['path'])
 
     if quality == 'original':
-        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+        cmd = ['ffmpeg', '-y', 
+               '-readrate', '4.0',
+               '-ss', str(start), '-i', src,
                '-t', str(duration), '-c', 'copy',
                '-progress', progress_file, tmp]
     elif quality == 'medium':
-        if HW_ENCODER == 'blablabla':#'h264_v4l2m2m':
+        if HW_ENCODER == 'h264_v4l2m2m':
             cmd = ['ffmpeg', '-y',
                 '-readrate', '4.0',
                 '-ss', str(start), '-i', src,
@@ -354,7 +356,7 @@ def trim():
                 '-movflags', '+faststart',
                 '-progress', progress_file, tmp]
     else:  # low
-        if HW_ENCODER == 'blablabla':#h264_v4l2m2m':
+        if HW_ENCODER == 'h264_v4l2m2m':
             cmd = ['ffmpeg', '-y',
                 '-readrate', '4.0',
                 '-ss', str(start), '-i', src,
