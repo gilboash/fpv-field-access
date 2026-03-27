@@ -43,10 +43,11 @@ AP_IP=$(ip addr show wlan0 | grep "inet " | awk '{print $2}' | cut -d/ -f1)
 log "Hotspot up at $AP_IP"
 
 # configure dnsmasq for captive portal
+# configure dnsmasq for DNS only (no DHCP - NetworkManager handles that)
 sudo systemctl stop dnsmasq
 cat << EOF | sudo tee /etc/dnsmasq.d/picam-hotspot.conf
 interface=wlan0
-dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+no-dhcp-interface=wlan0
 address=/#/192.168.4.1
 EOF
 sudo systemctl start dnsmasq
