@@ -118,7 +118,14 @@ def parse_ffmpeg_progress(progress_file, duration_secs):
 def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
     with jobs_lock:
         jobs[job_id]['status'] = 'running'
-    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # wrap with memory limit to prevent OOM crash
+    import resource
+    def set_memory_limit():
+        # limit to 400MB virtual memory
+        resource.setrlimit(resource.RLIMIT_AS, (400 * 1024 * 1024, 400 * 1024 * 1024))
+
+    result = subprocess.run(cmd, capture_output=True, text=True, preexec_fn=set_memory_limit)
     with jobs_lock:
         if result.returncode == 0:
             os.rename(tmp, out)
@@ -129,7 +136,7 @@ def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
             if os.path.exists(tmp):
                 os.remove(tmp)
             jobs[job_id]['status'] = 'error'
-            jobs[job_id]['error'] = result.stderr[-300:]
+            jobs[job_id]['error'] = result.stderr[-300:] or 'Out of memory — try Original quality for large files'
     if os.path.exists(progress_file):
         os.remove(progress_file)
 
@@ -330,53 +337,54 @@ def trim():
                '-progress', progress_file, tmp]
     elif quality == 'medium':
         if HW_ENCODER == 'h264_v4l2m2m':
-            cmd = ['ffmpeg', '-y', 
-                   '-readrate', '1.0',    # limit USB read speed
-                   '-ss', str(start), '-i', src,
-                   '-t', str(duration), '-r', '30',
-                   '-vf', 'scale=1280:-2',
-                   '-pix_fmt', 'yuv420p',
-                   '-c:v', 'h264_v4l2m2m', '-b:v', '2M',
-                   '-c:a', 'aac', '-b:a', '96k',
-                   '-max_muxing_queue_size', '512',
-                   '-movflags', '+faststart',
-                   '-progress', progress_file, tmp]
+            cmd = ['ffmpeg', '-y',
+                '-readrate', '4.0',
+                '-ss', str(start), '-i', src,
+                '-t', str(duration), '-r', '30',
+                '-vf', 'scale=1280:-2',
+                '-pix_fmt', 'yuv420p',
+                '-c:v', 'h264_v4l2m2m', '-b:v', '2M',
+                '-c:a', 'aac', '-b:a', '96k',
+                '-max_muxing_queue_size', '128',
+                '-movflags', '+faststart',
+                '-progress', progress_file, tmp]
         else:
-            cmd = ['ffmpeg', '-y', 
-                   '-readrate', '1.0',    # limit USB read speed
-                   '-ss', str(start), '-i', src,
-                   '-t', str(duration), '-r', '30',
-                   '-threads', '2',
-                   '-c:v', 'libx264', '-crf', '28', '-preset', 'fast',
-                   '-c:a', 'aac', '-b:a', '96k',
-                   '-max_muxing_queue_size', '512',
-                   '-movflags', '+faststart',
-                   '-progress', progress_file, tmp]
-    else:
+            cmd = ['ffmpeg', '-y',
+                '-readrate', '2.0',
+                '-ss', str(start), '-i', src,
+                '-t', str(duration), '-r', '24',
+                '-threads', '1',           # single thread only
+                '-vf', 'scale=854:-2',     # smaller scale
+                '-c:v', 'libx264', '-crf', '32', '-preset', 'ultrafast',
+                '-c:a', 'aac', '-b:a', '96k',
+                '-max_muxing_queue_size', '128',
+                '-movflags', '+faststart',
+                '-progress', progress_file, tmp]
+    else:  # low
         if HW_ENCODER == 'h264_v4l2m2m':
-            cmd = ['ffmpeg', '-y', 
-                   '-readrate', '1.0',    # limit USB read speed
-                   '-ss', str(start), '-i', src,
-                   '-t', str(duration), '-r', '24',
-                   '-vf', 'scale=640:-2',
-                   '-pix_fmt', 'yuv420p',
-                   '-c:v', 'h264_v4l2m2m', '-b:v', '1M',
-                   '-c:a', 'aac', '-b:a', '64k',
-                   '-max_muxing_queue_size', '512',
-                   '-movflags', '+faststart',
-                   '-progress', progress_file, tmp]
+            cmd = ['ffmpeg', '-y',
+                '-readrate', '4.0',
+                '-ss', str(start), '-i', src,
+                '-t', str(duration), '-r', '24',
+                '-vf', 'scale=640:-2',
+                '-pix_fmt', 'yuv420p',
+                '-c:v', 'h264_v4l2m2m', '-b:v', '1M',
+                '-c:a', 'aac', '-b:a', '64k',
+                '-max_muxing_queue_size', '128',
+                '-movflags', '+faststart',
+                '-progress', progress_file, tmp]
         else:
-            cmd = ['ffmpeg', '-y', 
-                   '-readrate', '1.0',    # limit USB read speed
-                   '-ss', str(start), '-i', src,
-                   '-t', str(duration), '-r', '24',
-                   '-threads', '2',
-                   '-vf', 'scale=640:-2',
-                   '-c:v', 'libx264', '-crf', '35', '-preset', 'fast',
-                   '-c:a', 'aac', '-b:a', '64k',
-                   '-max_muxing_queue_size', '512',
-                   '-movflags', '+faststart',
-                   '-progress', progress_file, tmp]
+            cmd = ['ffmpeg', '-y',
+                '-readrate', '2.0',
+                '-ss', str(start), '-i', src,
+                '-t', str(duration), '-r', '24',
+                '-threads', '1',
+                '-vf', 'scale=640:-2',
+                '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
+                '-c:a', 'aac', '-b:a', '64k',
+                '-max_muxing_queue_size', '128',
+                '-movflags', '+faststart',
+                '-progress', progress_file, tmp]
 
     with jobs_lock:
         jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}

@@ -673,7 +673,12 @@
       const data = await res.json();
       if (data.error) {
         clearInterval(trimPollTimer); trimPollTimer = null;
-        showTrimError('Job lost — app was restarted. Please try again.');
+
+        const msg = data.error || 'Failed';
+        const isOom = msg.includes('memory') || msg.includes('killed') || msg.includes('139');
+        showTrimError(isOom
+        ? 'Not enough memory for re-encoding. Use Original quality for large files.'
+        : msg);
         return;
       }
       if (data.status === 'running' || data.status === 'queued') {
