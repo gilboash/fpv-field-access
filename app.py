@@ -100,7 +100,7 @@ def get_videos(sd_path):
                     "type": "ts" if is_ts else "video",
                     "converted": converted_exists,
                     "converted_file": conv_filename if converted_exists else None,
-                    "large": size_mb > 500  # flag large files
+                    "large": size_mb > 1024  # flag large files
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
