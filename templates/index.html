@@ -439,7 +439,9 @@
     const res = await fetch('/api/videos');
     const videos = await res.json();
     document.getElementById('subtitle').textContent =
-      `${videos.length} clip${videos.length !== 1 ? 's' : ''} on SD card`;
+      videos.length === 0
+        ? 'No SD card detected'
+        : `${videos.length} clip${videos.length !== 1 ? 's' : ''} on SD card`;
 
     const grid = document.getElementById('video-grid');
     if (videos.length === 0) {

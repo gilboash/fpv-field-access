@@ -6,7 +6,6 @@ from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
 
-SD_PATH = "/media/naco/3834-6662"
 WORK_DIR = os.path.expanduser("~/fpv-field-access/work")
 THUMB_DIR = os.path.join(WORK_DIR, "thumbs")
 os.makedirs(WORK_DIR, exist_ok=True)
@@ -45,6 +44,18 @@ def detect_hw_encoder():
 
 HW_ENCODER = detect_hw_encoder()
 
+def get_sd_path():
+    """Dynamically find the first mounted SD card under /media/naco/"""
+    media_path = "/media/naco"
+    try:
+        for mount in sorted(os.listdir(media_path)):
+            full = os.path.join(media_path, mount)
+            if os.path.ismount(full):
+                return full
+    except:
+        pass
+    return None
+
 def cleanup_work_dir():
     for f in os.listdir(WORK_DIR):
         if f.startswith('trim_') or f.startswith('progress_'):
@@ -58,14 +69,14 @@ def get_free_space(path):
     st = os.statvfs(path)
     return st.f_bavail * st.f_frsize
 
-def get_videos():
+def get_videos(sd_path):
     videos = []
-    for root, dirs, files in os.walk(SD_PATH):
+    for root, dirs, files in os.walk(sd_path):
         for f in files:
             ext = os.path.splitext(f)[1].upper()
             if ext in ('.MP4', '.MOV', '.TS') and not f.startswith('._'):
                 full = os.path.join(root, f)
-                rel = os.path.relpath(full, SD_PATH)
+                rel = os.path.relpath(full, sd_path)
                 size = os.path.getsize(full)
                 is_ts = ext == '.TS'
                 converted_exists = False
@@ -157,13 +168,20 @@ def index():
 
 @app.route('/api/videos')
 def list_videos():
-    return jsonify(get_videos())
+    sd = get_sd_path()
+    if not sd:
+        return jsonify([])
+    return jsonify(get_videos(sd))
 
 @app.route('/api/thumbnail/<path:filepath>')
 def thumbnail(filepath):
     global thumb_paused
     if thumb_paused:
         return '', 503
+
+    sd = get_sd_path()
+    if not sd:
+        return '', 404
 
     filename = os.path.basename(filepath)
     thumb_name = get_thumb_name(filename)
@@ -178,7 +196,7 @@ def thumbnail(filepath):
         if os.path.exists(thumb_path):
             return send_file(thumb_path, mimetype='image/jpeg')
 
-        src = os.path.join(SD_PATH, filepath)
+        src = os.path.join(sd, filepath)
         tmp = thumb_path + ".tmp.jpg"
         cmd = [
             'ffmpeg', '-y',
@@ -208,7 +226,11 @@ def stream(filepath):
     thumb_resume_timer = threading.Timer(30, resume_thumbs)
     thumb_resume_timer.start()
 
-    full = os.path.join(SD_PATH, filepath)
+    sd = get_sd_path()
+    if not sd:
+        return '', 404
+
+    full = os.path.join(sd, filepath)
     file_size = os.path.getsize(full)
     range_header = request.headers.get('Range')
 
@@ -240,11 +262,18 @@ def stream(filepath):
 
 @app.route('/api/download/<path:filepath>')
 def download(filepath):
-    full = os.path.join(SD_PATH, filepath)
+    sd = get_sd_path()
+    if not sd:
+        return '', 404
+    full = os.path.join(sd, filepath)
     return send_file(full, as_attachment=True)
 
 @app.route('/api/trim', methods=['POST'])
 def trim():
+    sd = get_sd_path()
+    if not sd:
+        return jsonify({'error': 'No SD card found'}), 404
+
     data = request.json
     base = os.path.splitext(os.path.basename(data['path']))[0]
     quality = data.get('quality', 'original')
@@ -254,7 +283,7 @@ def trim():
     out = os.path.join(WORK_DIR, f"trim_{base}_{quality}_{job_id}.mp4")
     tmp = os.path.join(WORK_DIR, f"trim_{base}_{quality}_{job_id}_tmp.mp4")
     progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
-    src = os.path.join(SD_PATH, data['path'])
+    src = os.path.join(sd, data['path'])
 
     if quality == 'original':
         cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
@@ -273,7 +302,7 @@ def trim():
         else:
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '30',
-                   '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
+                   '-c:v', 'libx264', '-crf', '28', '-preset', 'fast',
                    '-c:a', 'aac', '-b:a', '96k',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
@@ -291,7 +320,7 @@ def trim():
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '24',
                    '-vf', 'scale=640:-2',
-                   '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
+                   '-c:v', 'libx264', '-crf', '35', '-preset', 'fast',
                    '-c:a', 'aac', '-b:a', '64k',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
@@ -334,12 +363,17 @@ def get_output(filename):
 def add_to_convert_queue():
     global queue_worker_running, thumb_paused
     thumb_paused = True
+
+    sd = get_sd_path()
+    if not sd:
+        return jsonify({'error': 'No SD card found'}), 404
+
     data = request.json
     paths = data.get('paths', [])
     job_ids = []
 
     for path in paths:
-        src = os.path.join(SD_PATH, path)
+        src = os.path.join(sd, path)
         base = os.path.splitext(os.path.basename(path))[0]
         src_dir = os.path.dirname(src)
         out = os.path.join(src_dir, f"{base}_converted.mp4")
