@@ -118,14 +118,7 @@ def parse_ffmpeg_progress(progress_file, duration_secs):
 def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
     with jobs_lock:
         jobs[job_id]['status'] = 'running'
-
-    # wrap with memory limit to prevent OOM crash
-    import resource
-    def set_memory_limit():
-        # limit to 400MB virtual memory
-        resource.setrlimit(resource.RLIMIT_AS, (400 * 1024 * 1024, 400 * 1024 * 1024))
-
-    result = subprocess.run(cmd, capture_output=True, text=True, preexec_fn=set_memory_limit)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     with jobs_lock:
         if result.returncode == 0:
             os.rename(tmp, out)
@@ -136,7 +129,7 @@ def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
             if os.path.exists(tmp):
                 os.remove(tmp)
             jobs[job_id]['status'] = 'error'
-            jobs[job_id]['error'] = result.stderr[-300:] or 'Out of memory — try Original quality for large files'
+            jobs[job_id]['error'] = result.stderr[-300:]
     if os.path.exists(progress_file):
         os.remove(progress_file)
 
@@ -336,7 +329,7 @@ def trim():
                '-t', str(duration), '-c', 'copy',
                '-progress', progress_file, tmp]
     elif quality == 'medium':
-        if HW_ENCODER == 'h264_v4l2m2m':
+        if HW_ENCODER == 'blablabla':#'h264_v4l2m2m':
             cmd = ['ffmpeg', '-y',
                 '-readrate', '4.0',
                 '-ss', str(start), '-i', src,
@@ -361,7 +354,7 @@ def trim():
                 '-movflags', '+faststart',
                 '-progress', progress_file, tmp]
     else:  # low
-        if HW_ENCODER == 'h264_v4l2m2m':
+        if HW_ENCODER == 'blablabla':#h264_v4l2m2m':
             cmd = ['ffmpeg', '-y',
                 '-readrate', '4.0',
                 '-ss', str(start), '-i', src,
