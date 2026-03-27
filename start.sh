@@ -7,11 +7,9 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG"
 }
 
-# defaults
 SSID="PiCam"
 PASSWORD="picam1234"
 
-# read config
 if [ -f "$CONFIG" ]; then
     while IFS='=' read -r key value; do
         key=$(echo "$key" | tr -d ' ')
@@ -25,10 +23,8 @@ fi
 
 log "Starting hotspot: SSID=$SSID"
 
-# clean up any previous hotspot
 sudo nmcli connection delete picam-hotspot 2>/dev/null
 
-# create hotspot
 sudo nmcli connection add type wifi ifname wlan0 con-name picam-hotspot autoconnect no \
     ssid "$SSID" \
     802-11-wireless.mode ap \
@@ -38,7 +34,7 @@ sudo nmcli connection add type wifi ifname wlan0 con-name picam-hotspot autoconn
     wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk "$PASSWORD"
 
-sudo nmcli device disconnect wlan0
+sudo nmcli device disconnect wlan0 2>/dev/null
 sleep 3
 sudo nmcli connection up picam-hotspot
 sleep 2
@@ -46,10 +42,17 @@ sleep 2
 AP_IP=$(ip addr show wlan0 | grep "inet " | awk '{print $2}' | cut -d/ -f1)
 log "Hotspot up at $AP_IP"
 
-# start app
+# configure dnsmasq for captive portal
+sudo systemctl stop dnsmasq
+cat << EOF | sudo tee /etc/dnsmasq.d/picam-hotspot.conf
+interface=wlan0
+dhcp-range=192.168.4.2,192.168.4.20,255.255.255.0,24h
+address=/#/192.168.4.1
+EOF
+sudo systemctl start dnsmasq
+log "dnsmasq captive portal started"
+
 log "Starting FPV Field Access..."
 cd /home/naco/fpv-field-access
-
-# with this:
-exec /usr/bin/python3 app.py >> "$LOG" 2>&1
-#exec gunicorn --workers 1 --bind 0.0.0.0:5000 --timeout 300 app:app >> "$LOG" 2>&1
+#exec /usr/bin/python3 app.py >> "$LOG" 2>&1
+exec authbind --deep /usr/bin/python3 app.py >> "$LOG" 2>&1

@@ -2,7 +2,7 @@ import os
 import subprocess
 import threading
 import uuid
-from flask import Flask, render_template, request, jsonify, send_file, Response
+from flask import Flask, render_template, request, jsonify, send_file, Response, redirect
 
 app = Flask(__name__)
 
@@ -21,6 +21,19 @@ queue_worker_running = False
 thumb_semaphore = threading.Semaphore(1)
 thumb_paused = False
 thumb_resume_timer = None
+
+# captive portal detection — iOS, Android, Windows all check different URLs
+@app.route('/generate_204')
+@app.route('/gen_204')
+@app.route('/hotspot-detect.html')
+@app.route('/library/test/success.html')
+@app.route('/success.txt')
+@app.route('/connecttest.txt')
+@app.route('/ncsi.txt')
+@app.route('/redirect')
+@app.route('/canonical.html')
+def captive_portal():
+    return redirect('http://192.168.4.1', 302)
 
 def detect_hw_encoder():
     test_cmd = [
@@ -509,6 +522,7 @@ def conversion_busy():
         busy = queue_worker_running or len(convert_queue) > 0
     return jsonify({'busy': busy})
 
+
 if __name__ == '__main__':
     cleanup_work_dir()
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    app.run(host='0.0.0.0', port=80, debug=False, threaded=True)
