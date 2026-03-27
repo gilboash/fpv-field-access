@@ -128,7 +128,6 @@
     font-size: 14px; font-weight: 600; cursor: pointer;
   }
 
-  /* conv badge */
   .conv-badge {
     display: inline-block; font-size: 10px;
     padding: 1px 6px; border-radius: 20px; font-weight: 500;
@@ -138,7 +137,6 @@
   .conv-badge.done { background: #14532d; color: #4ade80; }
   .conv-badge.error { background: #450a0a; color: #f87171; }
 
-  /* modals */
   .modal {
     display: none; position: fixed; inset: 0;
     background: #0a0a0a; z-index: 100;
@@ -364,6 +362,8 @@
   let convertDuration = 300;
   let queueJobs = {};
   let queuePollTimer = null;
+  let isBusy = false;
+  let lastVideoCount = 0;
 
   const qualityDescs = {
     original: 'Full quality, instant — same as source',
@@ -389,7 +389,17 @@
     document.getElementById('trim-start').value = Math.floor(video.currentTime);
   }
 
-  // lazy thumb observer
+  function setConversionBusy(busy) {
+    isBusy = busy;
+    if (busy) {
+      document.getElementById('subtitle').textContent = 'Converting... please wait';
+      document.getElementById('convert-bar').classList.remove('visible');
+    } else {
+      document.getElementById('subtitle').textContent =
+        `${lastVideoCount} clip${lastVideoCount !== 1 ? 's' : ''} on SD card`;
+    }
+  }
+
   const thumbObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
@@ -418,12 +428,17 @@
   }
 
   function toggleSelect(path, el) {
+    if (isBusy) { el.checked = false; return; }
     const card = el.closest('.video-card');
     card.classList.toggle('selected', el.checked);
     updateConvertBar();
   }
 
   function updateConvertBar() {
+    if (isBusy) {
+      document.getElementById('convert-bar').classList.remove('visible');
+      return;
+    }
     const checked = document.querySelectorAll('.ts-checkbox:checked');
     const bar = document.getElementById('convert-bar');
     const label = document.getElementById('convert-bar-label');
@@ -440,22 +455,20 @@
     const videos = await res.json();
 
     if (videos.length === 0) {
-        document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
-        document.getElementById('video-grid').innerHTML =
-            '<div class="empty" style="grid-column:span 2">Looking for SD card...</div>';
-        setTimeout(loadVideos, 3000); // retry every 3 seconds
-        return;
-    }
-    document.getElementById('subtitle').textContent =
-      videos.length === 0
-        ? 'No SD card detected'
-        : `${videos.length} clip${videos.length !== 1 ? 's' : ''} on SD card`;
-
-    const grid = document.getElementById('video-grid');
-    if (videos.length === 0) {
-      grid.innerHTML = '<div class="empty" style="grid-column:span 2">No videos found on SD card</div>';
+      document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
+      document.getElementById('video-grid').innerHTML =
+        '<div class="empty" style="grid-column:span 2">Looking for SD card...</div>';
+      setTimeout(loadVideos, 3000);
       return;
     }
+
+    lastVideoCount = videos.length;
+    if (!isBusy) {
+      document.getElementById('subtitle').textContent =
+        `${videos.length} clip${videos.length !== 1 ? 's' : ''} on SD card`;
+    }
+
+    const grid = document.getElementById('video-grid');
 
     let statuses = {};
     try {
@@ -476,7 +489,7 @@
         <div class="video-card ${isTs ? 'ts-card' : ''}" id="card-${encodeURIComponent(v.path)}">
           ${isTs ? `<input type="checkbox" class="ts-checkbox" data-path="${v.path}"
             onchange="toggleSelect('${v.path}', this)"
-            ${jobStatus ? 'disabled' : ''}>` : ''}
+            ${jobStatus || isBusy ? 'disabled' : ''}>` : ''}
           <div class="card-thumb" onclick="${isTs ? `openConvert('${v.path}', '${v.name}')` : `openModal('${v.path}', '${v.name}')`}">
             ${isTs
               ? `<div class="ts-label">TS</div>`
@@ -505,7 +518,7 @@
           <div class="card-actions">
             ${isTs
               ? hasConverted
-                ? `<button class="btn btn-convert" onclick="reconvert('${v.path}')">⟳ Re-convert</button>`
+                ? `<button class="btn btn-convert" onclick="reconvert('${v.path}')" ${isBusy ? 'disabled' : ''}>⟳ Re-convert</button>`
                 : jobStatus
                   ? `<button class="btn btn-convert" disabled>⟳ ${jobStatus === 'running' ? 'Converting' : 'Queued'}</button>`
                   : ''
@@ -543,6 +556,7 @@
   }
 
   function openConvert(path, name) {
+    if (isBusy) return;
     convertPath = path;
     document.getElementById('convert-title').textContent = name;
     document.getElementById('convert-btn').disabled = false;
@@ -637,6 +651,7 @@
       return;
     }
     convertDuration = 300;
+    setConversionBusy(true);
     pollConvertProgress(job.job_id);
   }
 
@@ -652,6 +667,7 @@
       } else if (data.status === 'done') {
         clearInterval(convertPollTimer); convertPollTimer = null;
         document.getElementById('convert-fill').style.width = '100%';
+        setConversionBusy(false);
         setTimeout(() => {
           document.getElementById('convert-progress-wrap').classList.remove('show');
           document.getElementById('convert-result').classList.add('show');
@@ -659,6 +675,7 @@
         }, 400);
       } else if (data.status === 'error') {
         clearInterval(convertPollTimer); convertPollTimer = null;
+        setConversionBusy(false);
         document.getElementById('convert-error').textContent = 'Error: ' + (data.error || 'Failed');
         document.getElementById('convert-error').classList.add('show');
         document.getElementById('convert-btn').disabled = false;
@@ -667,6 +684,7 @@
   }
 
   async function convertSelected() {
+    if (isBusy) return;
     const checked = document.querySelectorAll('.ts-checkbox:checked');
     const paths = Array.from(checked).map(cb => cb.dataset.path);
     if (!paths.length) return;
@@ -675,6 +693,7 @@
       cb.closest('.video-card').classList.remove('selected');
     });
     updateConvertBar();
+    setConversionBusy(true);
     const res = await fetch('/api/convert_queue', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -690,6 +709,8 @@
   }
 
   async function reconvert(path) {
+    if (isBusy) return;
+    setConversionBusy(true);
     const res = await fetch('/api/convert_queue', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -700,7 +721,6 @@
       if (!j.error) queueJobs[j.job_id] = j.path;
       else alert(j.error);
     });
-    setConversionBusy(true);
     startQueuePoll();
     loadVideos();
   }
@@ -709,17 +729,8 @@
     const res = await fetch('/api/conversion_busy');
     const data = await res.json();
     if (data.busy) {
-        setConversionBusy(true);
-        startQueuePoll();
-    }
-  }
-  function setConversionBusy(busy) {
-    document.querySelectorAll('.ts-checkbox').forEach(cb => cb.disabled = busy);
-    document.getElementById('convert-bar').style.opacity = busy ? '0.4' : '1';
-    document.getElementById('convert-bar').style.pointerEvents = busy ? 'none' : 'auto';
-    const subtitle = document.getElementById('subtitle');
-    if (busy && !subtitle.textContent.includes('Converting')) {
-        subtitle.textContent = 'Converting... please wait';
+      setConversionBusy(true);
+      startQueuePoll();
     }
   }
 
@@ -756,9 +767,9 @@
     document.getElementById('trim-error').textContent = 'Error: ' + msg;
     document.getElementById('trim-error').classList.add('show');
   }
+
   loadVideos();
   checkConversionBusy();
-
 </script>
 </body>
 </html>
