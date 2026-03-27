@@ -86,7 +86,8 @@ def get_videos(sd_path):
 
                 is_ts = ext == '.TS'
                 converted_exists = False
-                conv_filename = None
+                conv_rel = None
+
                 if is_ts:
                     base = os.path.splitext(f)[0]
                     conv_filename = f"{base}_converted.mp4"
@@ -94,24 +95,18 @@ def get_videos(sd_path):
                     converted_exists = os.path.exists(conv_full)
                     if converted_exists:
                         conv_rel = os.path.relpath(conv_full, sd_path)
-                    else:
-                        conv_rel = None
-                videos.append({
-                    ...
-                    "converted": converted_exists,
-                    "converted_file": conv_rel
-                })
+
                 videos.append({
                     "name": f,
                     "path": rel,
                     "size_mb": size_mb,
                     "type": "ts" if is_ts else "video",
                     "converted": converted_exists,
-                    "converted_file": conv_filename if converted_exists else None,
-                    "large": size_mb > 1024  # flag large files
+                    "converted_file": conv_rel,
+                    "large": size_mb > 1024
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
-
+    
 def get_thumb_name(filename):
     base = os.path.splitext(filename)[0]
     return f"{base}_thumb.jpg"
