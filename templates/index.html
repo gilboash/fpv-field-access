@@ -700,8 +700,27 @@
       if (!j.error) queueJobs[j.job_id] = j.path;
       else alert(j.error);
     });
+    setConversionBusy(true);
     startQueuePoll();
     loadVideos();
+  }
+
+  async function checkConversionBusy() {
+    const res = await fetch('/api/conversion_busy');
+    const data = await res.json();
+    if (data.busy) {
+        setConversionBusy(true);
+        startQueuePoll();
+    }
+  }
+  function setConversionBusy(busy) {
+    document.querySelectorAll('.ts-checkbox').forEach(cb => cb.disabled = busy);
+    document.getElementById('convert-bar').style.opacity = busy ? '0.4' : '1';
+    document.getElementById('convert-bar').style.pointerEvents = busy ? 'none' : 'auto';
+    const subtitle = document.getElementById('subtitle');
+    if (busy && !subtitle.textContent.includes('Converting')) {
+        subtitle.textContent = 'Converting... please wait';
+    }
   }
 
   function startQueuePoll() {
@@ -725,6 +744,7 @@
       if (allDone && Object.keys(queueJobs).length > 0) {
         clearInterval(queuePollTimer); queuePollTimer = null;
         queueJobs = {};
+        setConversionBusy(false);
         loadVideos();
       }
     }, 2000);
@@ -736,8 +756,9 @@
     document.getElementById('trim-error').textContent = 'Error: ' + msg;
     document.getElementById('trim-error').classList.add('show');
   }
-
   loadVideos();
+  checkConversionBusy();
+
 </script>
 </body>
 </html>

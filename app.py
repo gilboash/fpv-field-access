@@ -132,6 +132,12 @@ def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
     if os.path.exists(progress_file):
         os.remove(progress_file)
 
+@app.route('/api/conversion_busy')
+def conversion_busy():
+    with convert_queue_lock:
+        busy = queue_worker_running or len(convert_queue) > 0
+    return jsonify({'busy': busy})
+    
 def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
     global thumb_paused
     with jobs_lock:
