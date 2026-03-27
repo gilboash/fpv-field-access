@@ -274,7 +274,7 @@ def trim():
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '30',
                    '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
-                   '-threads', '1', '-c:a', 'aac', '-b:a', '96k',
+                   '-c:a', 'aac', '-b:a', '96k',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
     else:
@@ -292,7 +292,7 @@ def trim():
                    '-t', str(duration), '-r', '24',
                    '-vf', 'scale=640:-2',
                    '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
-                   '-threads', '1', '-c:a', 'aac', '-b:a', '64k',
+                   '-c:a', 'aac', '-b:a', '64k',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
 

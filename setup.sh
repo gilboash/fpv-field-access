@@ -33,6 +33,7 @@ echo "Installing systemd service..."
 sudo cp ~/fpv-field-access/picam.service /etc/systemd/system/picam.service
 sudo systemctl daemon-reload
 sudo systemctl enable picam
+sudo apt install -y gunicorn
 
 # 7. Create default picam.conf if not exists
 if [ ! -f /boot/firmware/picam.conf ]; then
