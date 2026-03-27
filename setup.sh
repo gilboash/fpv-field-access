@@ -12,12 +12,7 @@ echo "Creating work directories..."
 mkdir -p ~/fpv-field-access/work/thumbs
 
 # 3. Fix SD card mount
-echo "Setting up SD card mount..."
-sudo mkdir -p /media/naco/3834-6662
-if ! grep -q "3834-6662" /etc/fstab; then
-    echo "UUID=3834-6662  /media/naco/3834-6662  exfat  defaults,uid=1000,gid=1000,umask=0022,nofail  0  0" | sudo tee -a /etc/fstab
-fi
-sudo mount -a
+
 
 # 4. Disable dnsmasq (conflicts with hotspot)
 echo "Disabling dnsmasq..."
