@@ -51,6 +51,14 @@ sudo udevadm control --reload-rules
 echo 'SUBSYSTEM=="usb", ATTR{power/autosuspend}="-1"' | sudo tee /etc/udev/rules.d/99-usb-autosuspend.rules
 sudo udevadm control --reload-rules
 
+
+# increase swap to 1GB
+echo "Configuring swap..."
+sudo dphys-swapfile swapoff
+sudo sed -i 's/CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+
 echo "=== Setup complete. Rebooting in 5 seconds ==="
 sleep 5
 sudo reboot
