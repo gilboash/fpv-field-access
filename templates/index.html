@@ -68,6 +68,12 @@
     background: #1a1400;
     color: #f59e0b; font-size: 18px; font-weight: 700;
   }
+  .ts-converted-label {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #0a1f12;
+    color: #4ade80; font-size: 14px; font-weight: 700;
+  }
   .play-overlay {
     position: absolute; inset: 0;
     display: flex; align-items: center; justify-content: center;
@@ -105,6 +111,7 @@
   .btn-play { background: #1d4ed8; color: #fff; }
   .btn-convert { background: #92400e; color: #fff; }
   .btn-dl { background: #1f2937; color: #aaa; }
+  .btn-green { background: #166534; color: #fff; }
 
   .ts-checkbox {
     position: absolute; top: 6px; right: 6px;
@@ -333,7 +340,7 @@
   <div class="trim-panel">
     <div class="section">
       <div class="section-title">Convert to MP4</div>
-      <p class="convert-info">Remuxes .ts to .mp4 — same quality, saves to SD card. Usually done in seconds.</p>
+      <p class="convert-info">Remuxes .ts to .mp4 — same quality, no re-encode. Saved locally, deleted on next boot.</p>
     </div>
     <button class="btn-full" id="convert-btn" onclick="startConvert()" style="background:#92400e;">⟳ Start converting</button>
     <div class="progress-wrap" id="convert-progress-wrap">
@@ -344,8 +351,10 @@
       <div class="progress-bar"><div class="progress-fill" id="convert-fill" style="background:#b45309;"></div></div>
     </div>
     <div class="result-box" id="convert-result">
-      <p>✓ Saved to SD card</p>
-      <button class="btn-download-result" onclick="closeConvert()">← Back to list</button>
+      <p>✓ Converted — ready to play or download</p>
+      <button class="btn-download-result" id="convert-download-btn" onclick="downloadConverted()">↓ Download MP4</button>
+      <button class="btn-download-result" style="background:#1d4ed8;margin-top:6px;" onclick="playConverted()">▶ Play MP4</button>
+      <button class="btn-download-result" style="background:#374151;margin-top:6px;" onclick="closeConvert()">← Back to list</button>
     </div>
     <div class="error-box" id="convert-error"></div>
   </div>
@@ -360,6 +369,7 @@
   let convertPath = null;
   let convertPollTimer = null;
   let convertDuration = 300;
+  let convertedFilename = null;
   let queueJobs = {};
   let queuePollTimer = null;
   let isBusy = false;
@@ -416,12 +426,12 @@
     const src = img.dataset.src;
     if (!src) return;
     const attempts = parseInt(img.dataset.attempts || '0');
-    if (attempts >= 3) return; // give up after 3 tries
+    if (attempts >= 3) return;
     img.dataset.attempts = attempts + 1;
     img.removeAttribute('src');
     setTimeout(() => {
-        img.src = src + '?t=' + Date.now();
-    }, 5000 * (attempts + 1)); // back off: 5s, 10s, 15s
+      img.src = src + '?t=' + Date.now();
+    }, 5000 * (attempts + 1));
   }
 
   function observeThumbs() {
@@ -456,27 +466,25 @@
   async function loadVideos() {
     let videos = [];
     try {
-        const res = await fetch('/api/videos');
-        videos = await res.json();
+      const res = await fetch('/api/videos');
+      videos = await res.json();
     } catch(e) {
-        document.getElementById('subtitle').textContent = 'Connection lost — retrying...';
-        document.getElementById('video-grid').innerHTML =
-            '<div class="empty" style="grid-column:span 2">Lost connection to device...</div>';
-        setTimeout(loadVideos, 3000);
-        return;
+      document.getElementById('subtitle').textContent = 'Connection lost — retrying...';
+      document.getElementById('video-grid').innerHTML =
+        '<div class="empty" style="grid-column:span 2">Lost connection to device...</div>';
+      setTimeout(loadVideos, 3000);
+      return;
     }
 
     if (videos.length === 0) {
-        document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
-        document.getElementById('video-grid').innerHTML = `
-            <div class="empty" style="grid-column:span 2">
-                <div style="margin-bottom:12px">Looking for SD card...</div>
-                <button class="btn btn-play" onclick="loadVideos()" style="font-size:12px;">
-                    Retry now
-                </button>
-            </div>`;
-        setTimeout(loadVideos, 5000);
-        return;
+      document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
+      document.getElementById('video-grid').innerHTML = `
+        <div class="empty" style="grid-column:span 2">
+          <div style="margin-bottom:12px">Looking for SD card...</div>
+          <button class="btn btn-play" onclick="loadVideos()" style="font-size:12px;">Retry now</button>
+        </div>`;
+      setTimeout(loadVideos, 5000);
+      return;
     }
 
     lastVideoCount = videos.length;
@@ -486,7 +494,6 @@
     }
 
     const grid = document.getElementById('video-grid');
-
     let statuses = {};
     try {
       const sr = await fetch('/api/queue_status');
@@ -496,25 +503,34 @@
     grid.innerHTML = videos.map(v => {
       const isTs = v.type === 'ts';
       const hasConverted = isTs && v.converted;
+      const convFile = v.converted_file || null;
       const activeJob = Object.entries(statuses).find(([id, job]) =>
         job.path === v.path && job.status !== 'done' && job.status !== 'error'
       );
       const jobId = activeJob ? activeJob[0] : null;
       const jobStatus = activeJob ? activeJob[1].status : null;
 
+      const thumbClick = hasConverted
+        ? `openConvertedModal('${convFile}', '${v.name}')`
+        : isTs
+          ? `openConvert('${v.path}', '${v.name}')`
+          : `openModal('${v.path}', '${v.name}')`;
+
       return `
         <div class="video-card ${isTs ? 'ts-card' : ''}" id="card-${encodeURIComponent(v.path)}">
-          ${isTs ? `<input type="checkbox" class="ts-checkbox" data-path="${v.path}"
+          ${isTs && !hasConverted ? `<input type="checkbox" class="ts-checkbox" data-path="${v.path}"
             onchange="toggleSelect('${v.path}', this)"
             ${jobStatus || isBusy ? 'disabled' : ''}>` : ''}
-          <div class="card-thumb" onclick="${isTs ? `openConvert('${v.path}', '${v.name}')` : `openModal('${v.path}', '${v.name}')`}">
+          <div class="card-thumb" onclick="${thumbClick}">
             ${isTs
-              ? `<div class="ts-label">TS</div>`
+              ? hasConverted
+                ? `<div class="ts-converted-label">MP4 ✓</div>`
+                : `<div class="ts-label">TS</div>`
               : `<img class="lazy-thumb" data-src="/api/thumbnail/${v.path}"
                      onerror="retryThumb(this)" alt="">
                  <div class="thumb-placeholder" style="display:none"></div>`
             }
-            <div class="play-overlay">${isTs ? '⟳' : '▶'}</div>
+            <div class="play-overlay">${hasConverted ? '▶' : isTs ? '⟳' : '▶'}</div>
           </div>
           <div class="card-info">
             <div class="card-name">${v.name}</div>
@@ -522,7 +538,7 @@
               ${v.size_mb} MB
               ${isTs
                 ? hasConverted
-                  ? '<span class="converted-dot">· ✓ converted</span>'
+                  ? '<span class="converted-dot">· ✓ mp4 ready</span>'
                   : jobId
                     ? `<span class="conv-badge ${jobStatus}" data-job="${jobId}">${
                         {queued: '○ queued', running: '⟳ converting'}[jobStatus]
@@ -535,10 +551,12 @@
           <div class="card-actions">
             ${isTs
               ? hasConverted
-                ? `<button class="btn btn-convert" onclick="reconvert('${v.path}')" ${isBusy ? 'disabled' : ''}>⟳ Re-convert</button>`
+                ? `<button class="btn btn-play" onclick="openConvertedModal('${convFile}', '${v.name}')">▶ Play</button>
+                   <button class="btn btn-green" onclick="window.location='/api/download_converted/${convFile}'">↓ MP4</button>
+                   <button class="btn btn-convert" onclick="reconvert('${v.path}')" ${isBusy ? 'disabled' : ''}>⟳</button>`
                 : jobStatus
                   ? `<button class="btn btn-convert" disabled>⟳ ${jobStatus === 'running' ? 'Converting' : 'Queued'}</button>`
-                  : ''
+                  : `<button class="btn btn-convert" onclick="openConvert('${v.path}', '${v.name}')" ${isBusy ? 'disabled' : ''}>⟳ Convert</button>`
               : `<button class="btn btn-play" onclick="openModal('${v.path}', '${v.name}')">▶ Play</button>`
             }
             <button class="btn btn-dl" onclick="downloadOriginal('${v.path}')">↓</button>
@@ -564,6 +582,20 @@
     document.getElementById('modal').classList.add('open');
   }
 
+  function openConvertedModal(filename, name) {
+    currentPath = null;
+    document.getElementById('modal-title').textContent = name + ' (MP4)';
+    document.getElementById('modal-video').src = '/api/stream_converted/' + filename;
+    document.getElementById('trim-start').value = 0;
+    document.getElementById('trim-btn').disabled = true;
+    document.getElementById('trim-progress-wrap').classList.remove('show');
+    document.getElementById('trim-result').classList.remove('show');
+    document.getElementById('trim-error').classList.remove('show');
+    document.getElementById('trim-fill').style.width = '0%';
+    trimResultFilename = null;
+    document.getElementById('modal').classList.add('open');
+  }
+
   function closeModal() {
     document.getElementById('modal').classList.remove('open');
     document.getElementById('modal-video').pause();
@@ -575,6 +607,7 @@
   function openConvert(path, name) {
     if (isBusy) return;
     convertPath = path;
+    convertedFilename = null;
     document.getElementById('convert-title').textContent = name;
     document.getElementById('convert-btn').disabled = false;
     document.getElementById('convert-progress-wrap').classList.remove('show');
@@ -588,11 +621,23 @@
     document.getElementById('convert-modal').classList.remove('open');
     if (convertPollTimer) { clearInterval(convertPollTimer); convertPollTimer = null; }
     convertPath = null;
+    convertedFilename = null;
     loadVideos();
   }
 
   function downloadOriginal(path) {
     window.location = '/api/download/' + path;
+  }
+
+  function downloadConverted() {
+    if (convertedFilename) window.location = '/api/download_converted/' + convertedFilename;
+  }
+
+  function playConverted() {
+    if (convertedFilename) {
+      closeConvert();
+      openConvertedModal(convertedFilename, document.getElementById('convert-title').textContent);
+    }
   }
 
   function downloadTrimResult() {
@@ -627,12 +672,10 @@
       const res = await fetch(`/api/progress/${jobId}?duration=${trimDuration}`);
       const data = await res.json();
       if (data.error) {
-        // job not found - app restarted mid-trim
         clearInterval(trimPollTimer); trimPollTimer = null;
         showTrimError('Job lost — app was restarted. Please try again.');
         return;
       }
-
       if (data.status === 'running' || data.status === 'queued') {
         const pct = data.progress || 0;
         document.getElementById('trim-fill').style.width = pct + '%';
@@ -684,7 +727,6 @@
     convertPollTimer = setInterval(async () => {
       const res = await fetch(`/api/progress/${jobId}?duration=${convertDuration}`);
       const data = await res.json();
-
       if (data.error) {
         clearInterval(convertPollTimer); convertPollTimer = null;
         setConversionBusy(false);
@@ -700,6 +742,7 @@
       } else if (data.status === 'done') {
         clearInterval(convertPollTimer); convertPollTimer = null;
         document.getElementById('convert-fill').style.width = '100%';
+        convertedFilename = data.output;
         setConversionBusy(false);
         setTimeout(() => {
           document.getElementById('convert-progress-wrap').classList.remove('show');

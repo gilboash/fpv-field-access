@@ -45,7 +45,6 @@ def detect_hw_encoder():
 HW_ENCODER = detect_hw_encoder()
 
 def get_sd_path():
-    """Dynamically find the first mounted SD card under /media/naco/"""
     media_path = "/media/naco"
     try:
         for mount in sorted(os.listdir(media_path)):
@@ -58,7 +57,7 @@ def get_sd_path():
 
 def cleanup_work_dir():
     for f in os.listdir(WORK_DIR):
-        if f.startswith('trim_') or f.startswith('progress_'):
+        if f.startswith('trim_') or f.startswith('progress_') or f.endswith('_converted.mp4'):
             try:
                 os.remove(os.path.join(WORK_DIR, f))
             except:
@@ -72,7 +71,6 @@ def get_free_space(path):
 def get_videos(sd_path):
     videos = []
     for root, dirs, files in os.walk(sd_path):
-        # skip hidden directories like .Trashes, .Spotlight, etc.
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for f in files:
             ext = os.path.splitext(f)[1].upper()
@@ -82,17 +80,20 @@ def get_videos(sd_path):
                 size = os.path.getsize(full)
                 is_ts = ext == '.TS'
                 converted_exists = False
+                conv_filename = None
                 if is_ts:
                     base = os.path.splitext(f)[0]
+                    conv_filename = f"{base}_converted.mp4"
                     converted_exists = os.path.exists(
-                        os.path.join(root, f"{base}_converted.mp4")
+                        os.path.join(WORK_DIR, conv_filename)
                     )
                 videos.append({
                     "name": f,
                     "path": rel,
                     "size_mb": round(size / 1024 / 1024, 1),
                     "type": "ts" if is_ts else "video",
-                    "converted": converted_exists
+                    "converted": converted_exists,
+                    "converted_file": conv_filename if converted_exists else None
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
@@ -132,21 +133,11 @@ def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
     if os.path.exists(progress_file):
         os.remove(progress_file)
 
-@app.route('/api/conversion_busy')
-def conversion_busy():
-    with convert_queue_lock:
-        busy = queue_worker_running or len(convert_queue) > 0
-    return jsonify({'busy': busy})
-
 def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
     global thumb_paused
-    tmp = out + ".tmp.mp4"
-    cmd = cmd[:-1] + [tmp]
-
     with jobs_lock:
         jobs[job_id]['status'] = 'running'
 
-    # check source still accessible before starting
     if not os.path.exists(src):
         with jobs_lock:
             jobs[job_id]['status'] = 'error'
@@ -155,21 +146,17 @@ def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
         return
 
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # treat as success if output exists and is >1MB (handles SD card read hiccups)
+    output_ok = os.path.exists(out) and os.path.getsize(out) > 1024 * 1024
+
     with jobs_lock:
-        if result.returncode == 0 and os.path.exists(tmp):
-            try:
-                os.rename(tmp, out)
-            except:
-                import shutil
-                shutil.copy2(tmp, out)
-                os.remove(tmp)
+        if output_ok:
             jobs[job_id]['status'] = 'done'
             jobs[job_id]['progress'] = 100
             jobs[job_id]['output'] = os.path.basename(out)
         else:
             try:
-                if os.path.exists(tmp):
-                    os.remove(tmp)
                 if os.path.exists(out):
                     os.remove(out)
             except:
@@ -182,16 +169,21 @@ def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
 
 def queue_worker():
     global queue_worker_running
-    while True:
+    try:
+        while True:
+            with convert_queue_lock:
+                if not convert_queue:
+                    queue_worker_running = False
+                    return
+                job = convert_queue.pop(0)
+            run_convert_to_sd(
+                job['job_id'], job['src'], job['out'],
+                job['cmd'], job['duration'], job['progress_file']
+            )
+    except Exception as e:
+        print(f"Queue worker error: {e}")
         with convert_queue_lock:
-            if not convert_queue:
-                queue_worker_running = False
-                return
-            job = convert_queue.pop(0)
-        run_convert_to_sd(
-            job['job_id'], job['src'], job['out'],
-            job['cmd'], job['duration'], job['progress_file']
-        )
+            queue_worker_running = False
 
 @app.route('/')
 def index():
@@ -245,8 +237,34 @@ def thumbnail(filepath):
 
     return '', 404
 
-@app.route('/api/stream/<path:filepath>')
-def stream(filepath):
+def make_stream_response(full_path, range_header):
+    file_size = os.path.getsize(full_path)
+    if range_header:
+        match = range_header.replace('bytes=', '').split('-')
+        byte_start = int(match[0])
+        byte_end = int(match[1]) if match[1] else min(byte_start + 10*1024*1024, file_size - 1)
+        length = byte_end - byte_start + 1
+
+        def generate():
+            with open(full_path, 'rb') as f:
+                f.seek(byte_start)
+                remaining = length
+                while remaining:
+                    chunk = f.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        rv = Response(generate(), status=206, mimetype='video/mp4', direct_passthrough=True)
+        rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
+        rv.headers['Accept-Ranges'] = 'bytes'
+        rv.headers['Content-Length'] = length
+        return rv
+
+    return send_file(full_path, mimetype='video/mp4')
+
+def pause_thumbs_temporarily():
     global thumb_paused, thumb_resume_timer
     thumb_paused = True
     if thumb_resume_timer:
@@ -257,39 +275,22 @@ def stream(filepath):
     thumb_resume_timer = threading.Timer(30, resume_thumbs)
     thumb_resume_timer.start()
 
+@app.route('/api/stream/<path:filepath>')
+def stream(filepath):
+    pause_thumbs_temporarily()
     sd = get_sd_path()
     if not sd:
         return '', 404
-
     full = os.path.join(sd, filepath)
-    file_size = os.path.getsize(full)
-    range_header = request.headers.get('Range')
+    return make_stream_response(full, request.headers.get('Range'))
 
-    if range_header:
-        match = range_header.replace('bytes=', '').split('-')
-        byte_start = int(match[0])
-        byte_end = int(match[1]) if match[1] else min(byte_start + 10*1024*1024, file_size - 1)
-        length = byte_end - byte_start + 1
-
-        def generate():
-            with open(full, 'rb') as f:
-                f.seek(byte_start)
-                remaining = length
-                while remaining:
-                    chunk = f.read(min(65536, remaining))
-                    if not chunk:
-                        break
-                    remaining -= len(chunk)
-                    yield chunk
-
-        rv = Response(generate(), status=206, mimetype='video/mp4',
-                     direct_passthrough=True)
-        rv.headers['Content-Range'] = f'bytes {byte_start}-{byte_end}/{file_size}'
-        rv.headers['Accept-Ranges'] = 'bytes'
-        rv.headers['Content-Length'] = length
-        return rv
-
-    return send_file(full, mimetype='video/mp4')
+@app.route('/api/stream_converted/<filename>')
+def stream_converted(filename):
+    pause_thumbs_temporarily()
+    full = os.path.join(WORK_DIR, filename)
+    if not os.path.exists(full):
+        return '', 404
+    return make_stream_response(full, request.headers.get('Range'))
 
 @app.route('/api/download/<path:filepath>')
 def download(filepath):
@@ -297,6 +298,13 @@ def download(filepath):
     if not sd:
         return '', 404
     full = os.path.join(sd, filepath)
+    return send_file(full, as_attachment=True)
+
+@app.route('/api/download_converted/<filename>')
+def download_converted(filename):
+    full = os.path.join(WORK_DIR, filename)
+    if not os.path.exists(full):
+        return '', 404
     return send_file(full, as_attachment=True)
 
 @app.route('/api/trim', methods=['POST'])
@@ -328,13 +336,16 @@ def trim():
                    '-pix_fmt', 'yuv420p',
                    '-c:v', 'h264_v4l2m2m', '-b:v', '2M',
                    '-c:a', 'aac', '-b:a', '96k',
+                   '-max_muxing_queue_size', '512',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
         else:
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '30',
+                   '-threads', '2',
                    '-c:v', 'libx264', '-crf', '28', '-preset', 'fast',
                    '-c:a', 'aac', '-b:a', '96k',
+                   '-max_muxing_queue_size', '512',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
     else:
@@ -345,14 +356,17 @@ def trim():
                    '-pix_fmt', 'yuv420p',
                    '-c:v', 'h264_v4l2m2m', '-b:v', '1M',
                    '-c:a', 'aac', '-b:a', '64k',
+                   '-max_muxing_queue_size', '512',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
         else:
             cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '24',
+                   '-threads', '2',
                    '-vf', 'scale=640:-2',
                    '-c:v', 'libx264', '-crf', '35', '-preset', 'fast',
                    '-c:a', 'aac', '-b:a', '64k',
+                   '-max_muxing_queue_size', '512',
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
 
@@ -406,20 +420,20 @@ def add_to_convert_queue():
     for path in paths:
         src = os.path.join(sd, path)
         base = os.path.splitext(os.path.basename(path))[0]
-        src_dir = os.path.dirname(src)
-        out = os.path.join(src_dir, f"{base}_converted.mp4")
+        out = os.path.join(WORK_DIR, f"{base}_converted.mp4")
         job_id = str(uuid.uuid4())[:8]
         progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
 
+        # check Pi local storage has enough space
         src_size = os.path.getsize(src)
-        free_space = get_free_space(src_dir)
+        free_space = get_free_space(WORK_DIR)
         if free_space < src_size * 1.1:
             free_mb = round(free_space / 1024 / 1024)
             needed_mb = round(src_size * 1.1 / 1024 / 1024)
             job_ids.append({
                 'job_id': job_id,
                 'path': path,
-                'error': f"Not enough space — need {needed_mb} MB, {free_mb} MB free"
+                'error': f"Not enough local space — need {needed_mb} MB, {free_mb} MB free"
             })
             continue
 
@@ -457,6 +471,12 @@ def add_to_convert_queue():
 def queue_status():
     with jobs_lock:
         return jsonify(dict(jobs))
+
+@app.route('/api/conversion_busy')
+def conversion_busy():
+    with convert_queue_lock:
+        busy = queue_worker_running or len(convert_queue) > 0
+    return jsonify({'busy': busy})
 
 if __name__ == '__main__':
     cleanup_work_dir()
