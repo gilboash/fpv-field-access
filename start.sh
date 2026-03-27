@@ -51,4 +51,5 @@ log "Starting FPV Field Access..."
 cd /home/naco/fpv-field-access
 
 # with this:
-exec gunicorn --workers 1 --bind 0.0.0.0:5000 --timeout 300 app:app >> "$LOG" 2>&1
+exec /usr/bin/python3 app.py >> "$LOG" 2>&1
+#exec gunicorn --workers 1 --bind 0.0.0.0:5000 --timeout 300 app:app >> "$LOG" 2>&1
