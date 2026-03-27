@@ -330,7 +330,9 @@ def trim():
                '-progress', progress_file, tmp]
     elif quality == 'medium':
         if HW_ENCODER == 'h264_v4l2m2m':
-            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+            cmd = ['ffmpeg', '-y', 
+                   '-readrate', '4.0',    # limit USB read speed
+                   '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '30',
                    '-vf', 'scale=1280:-2',
                    '-pix_fmt', 'yuv420p',
@@ -340,7 +342,9 @@ def trim():
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
         else:
-            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+            cmd = ['ffmpeg', '-y', 
+                   '-readrate', '4.0',    # limit USB read speed
+                   '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '30',
                    '-threads', '2',
                    '-c:v', 'libx264', '-crf', '28', '-preset', 'fast',
@@ -350,7 +354,9 @@ def trim():
                    '-progress', progress_file, tmp]
     else:
         if HW_ENCODER == 'h264_v4l2m2m':
-            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+            cmd = ['ffmpeg', '-y', 
+                   '-readrate', '4.0',    # limit USB read speed
+                   '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '24',
                    '-vf', 'scale=640:-2',
                    '-pix_fmt', 'yuv420p',
@@ -360,7 +366,9 @@ def trim():
                    '-movflags', '+faststart',
                    '-progress', progress_file, tmp]
         else:
-            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+            cmd = ['ffmpeg', '-y', 
+                   '-readrate', '4.0',    # limit USB read speed
+                   '-ss', str(start), '-i', src,
                    '-t', str(duration), '-r', '24',
                    '-threads', '2',
                    '-vf', 'scale=640:-2',
