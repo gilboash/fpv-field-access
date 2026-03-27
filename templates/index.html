@@ -438,6 +438,14 @@
   async function loadVideos() {
     const res = await fetch('/api/videos');
     const videos = await res.json();
+
+    if (videos.length === 0) {
+        document.getElementById('subtitle').textContent = 'No SD card detected — retrying...';
+        document.getElementById('video-grid').innerHTML =
+            '<div class="empty" style="grid-column:span 2">Looking for SD card...</div>';
+        setTimeout(loadVideos, 3000); // retry every 3 seconds
+        return;
+    }
     document.getElementById('subtitle').textContent =
       videos.length === 0
         ? 'No SD card detected'
