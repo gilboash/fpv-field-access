@@ -437,7 +437,9 @@ def add_to_convert_queue():
             })
             continue
 
-        cmd = ['ffmpeg', '-y', '-i', src,
+        cmd = ['ffmpeg', '-y', 
+               '-readrate', '1.0',    # read at 1x speed, don't saturate USB
+               '-i', src,
                '-c', 'copy',
                '-tag:v', 'hvc1',
                '-movflags', '+faststart',
