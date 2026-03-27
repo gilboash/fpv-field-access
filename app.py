@@ -57,7 +57,7 @@ def get_sd_path():
 
 def cleanup_work_dir():
     for f in os.listdir(WORK_DIR):
-        if f.startswith('trim_') or f.startswith('progress_') or f.endswith('_converted.mp4'):
+        if f.startswith('trim_') or f.startswith('progress_'):
             try:
                 os.remove(os.path.join(WORK_DIR, f))
             except:
@@ -90,9 +90,17 @@ def get_videos(sd_path):
                 if is_ts:
                     base = os.path.splitext(f)[0]
                     conv_filename = f"{base}_converted.mp4"
-                    converted_exists = os.path.exists(
-                        os.path.join(WORK_DIR, conv_filename)
-                    )
+                    conv_full = os.path.join(root, conv_filename)
+                    converted_exists = os.path.exists(conv_full)
+                    if converted_exists:
+                        conv_rel = os.path.relpath(conv_full, sd_path)
+                    else:
+                        conv_rel = None
+                videos.append({
+                    ...
+                    "converted": converted_exists,
+                    "converted_file": conv_rel
+                })
                 videos.append({
                     "name": f,
                     "path": rel,
@@ -291,13 +299,26 @@ def stream(filepath):
     full = os.path.join(sd, filepath)
     return make_stream_response(full, request.headers.get('Range'))
 
-@app.route('/api/stream_converted/<filename>')
-def stream_converted(filename):
+@app.route('/api/stream_converted/<path:filepath>')
+def stream_converted(filepath):
     pause_thumbs_temporarily()
-    full = os.path.join(WORK_DIR, filename)
+    sd = get_sd_path()
+    if not sd:
+        return '', 404
+    full = os.path.join(sd, filepath)
     if not os.path.exists(full):
         return '', 404
     return make_stream_response(full, request.headers.get('Range'))
+
+@app.route('/api/download_converted/<path:filepath>')
+def download_converted(filepath):
+    sd = get_sd_path()
+    if not sd:
+        return '', 404
+    full = os.path.join(sd, filepath)
+    if not os.path.exists(full):
+        return '', 404
+    return send_file(full, as_attachment=True)
 
 @app.route('/api/download/<path:filepath>')
 def download(filepath):
@@ -307,12 +328,6 @@ def download(filepath):
     full = os.path.join(sd, filepath)
     return send_file(full, as_attachment=True)
 
-@app.route('/api/download_converted/<filename>')
-def download_converted(filename):
-    full = os.path.join(WORK_DIR, filename)
-    if not os.path.exists(full):
-        return '', 404
-    return send_file(full, as_attachment=True)
 
 @app.route('/api/trim', methods=['POST'])
 def trim():
@@ -436,22 +451,24 @@ def add_to_convert_queue():
     job_ids = []
 
     for path in paths:
+        for path in paths:
         src = os.path.join(sd, path)
         base = os.path.splitext(os.path.basename(path))[0]
-        out = os.path.join(WORK_DIR, f"{base}_converted.mp4")
+        src_dir = os.path.dirname(src)
+        out = os.path.join(src_dir, f"{base}_converted.mp4")  # back to SD card
         job_id = str(uuid.uuid4())[:8]
         progress_file = os.path.join(WORK_DIR, f"progress_{job_id}.txt")
 
-        # check Pi local storage has enough space
+        # check SD card has enough space
         src_size = os.path.getsize(src)
-        free_space = get_free_space(WORK_DIR)
+        free_space = get_free_space(src_dir)
         if free_space < src_size * 1.1:
             free_mb = round(free_space / 1024 / 1024)
             needed_mb = round(src_size * 1.1 / 1024 / 1024)
             job_ids.append({
                 'job_id': job_id,
                 'path': path,
-                'error': f"Not enough local space — need {needed_mb} MB, {free_mb} MB free"
+                'error': f"Not enough space — need {needed_mb} MB, {free_mb} MB free"
             })
             continue
 
