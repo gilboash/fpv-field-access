@@ -2,7 +2,6 @@ import os
 import subprocess
 import threading
 import uuid
-import shutil
 from flask import Flask, render_template, request, jsonify, send_file, Response
 
 app = Flask(__name__)
@@ -13,16 +12,38 @@ THUMB_DIR = os.path.join(WORK_DIR, "thumbs")
 os.makedirs(WORK_DIR, exist_ok=True)
 os.makedirs(THUMB_DIR, exist_ok=True)
 
-# trim jobs
 jobs = {}
 jobs_lock = threading.Lock()
 
-# conversion queue
 convert_queue = []
 convert_queue_lock = threading.Lock()
 queue_worker_running = False
 
+thumb_semaphore = threading.Semaphore(1)
+thumb_paused = False
+thumb_resume_timer = None
 
+def detect_hw_encoder():
+    test_cmd = [
+        'ffmpeg', '-hide_banner', '-loglevel', 'error',
+        '-f', 'lavfi', '-i', 'color=black:size=320x240:rate=10',
+        '-t', '1',
+        '-c:v', 'h264_v4l2m2m',
+        '-b:v', '1M',
+        '-pix_fmt', 'yuv420p',
+        '-f', 'null', '-'
+    ]
+    try:
+        result = subprocess.run(test_cmd, capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            print("Hardware encoder detected and working: h264_v4l2m2m")
+            return 'h264_v4l2m2m'
+    except:
+        pass
+    print("No hardware encoder found, using software (libx264)")
+    return 'libx264'
+
+HW_ENCODER = detect_hw_encoder()
 
 def cleanup_work_dir():
     for f in os.listdir(WORK_DIR):
@@ -47,14 +68,12 @@ def get_videos():
                 rel = os.path.relpath(full, SD_PATH)
                 size = os.path.getsize(full)
                 is_ts = ext == '.TS'
-
                 converted_exists = False
                 if is_ts:
                     base = os.path.splitext(f)[0]
                     converted_exists = os.path.exists(
                         os.path.join(root, f"{base}_converted.mp4")
                     )
-
                 videos.append({
                     "name": f,
                     "path": rel,
@@ -101,6 +120,7 @@ def run_trim_job(job_id, src, out, tmp, cmd, duration_secs, progress_file):
         os.remove(progress_file)
 
 def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
+    global thumb_paused
     with jobs_lock:
         jobs[job_id]['status'] = 'running'
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -116,6 +136,7 @@ def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
             jobs[job_id]['error'] = result.stderr[-300:]
     if os.path.exists(progress_file):
         os.remove(progress_file)
+    thumb_paused = False
 
 def queue_worker():
     global queue_worker_running
@@ -140,25 +161,53 @@ def list_videos():
 
 @app.route('/api/thumbnail/<path:filepath>')
 def thumbnail(filepath):
-    return '', 404
+    global thumb_paused
+    if thumb_paused:
+        return '', 503
+
     filename = os.path.basename(filepath)
     thumb_name = get_thumb_name(filename)
     thumb_path = os.path.join(THUMB_DIR, thumb_name)
-    if not os.path.exists(thumb_path):
+
+    if os.path.exists(thumb_path):
+        return send_file(thumb_path, mimetype='image/jpeg')
+
+    with thumb_semaphore:
+        if thumb_paused:
+            return '', 503
+        if os.path.exists(thumb_path):
+            return send_file(thumb_path, mimetype='image/jpeg')
+
         src = os.path.join(SD_PATH, filepath)
         tmp = thumb_path + ".tmp.jpg"
-        cmd = ['ffmpeg', '-y', '-ss', '3', '-i', src,
-               '-vframes', '1', '-q:v', '5',
-               '-vf', 'scale=480:-1', tmp]
+        cmd = [
+            'ffmpeg', '-y',
+            '-ss', '0',
+            '-i', src,
+            '-vframes', '1',
+            '-q:v', '10',
+            '-vf', 'scale=160:-1',
+            tmp
+        ]
         result = subprocess.run(cmd, capture_output=True)
         if result.returncode == 0:
             os.rename(tmp, thumb_path)
-        else:
-            return '', 404
-    return send_file(thumb_path, mimetype='image/jpeg')
+            return send_file(thumb_path, mimetype='image/jpeg')
+
+    return '', 404
 
 @app.route('/api/stream/<path:filepath>')
 def stream(filepath):
+    global thumb_paused, thumb_resume_timer
+    thumb_paused = True
+    if thumb_resume_timer:
+        thumb_resume_timer.cancel()
+    def resume_thumbs():
+        global thumb_paused
+        thumb_paused = False
+    thumb_resume_timer = threading.Timer(30, resume_thumbs)
+    thumb_resume_timer.start()
+
     full = os.path.join(SD_PATH, filepath)
     file_size = os.path.getsize(full)
     range_header = request.headers.get('Range')
@@ -211,25 +260,41 @@ def trim():
         cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
                '-t', str(duration), '-c', 'copy',
                '-progress', progress_file, tmp]
-    elif quality == 'medium':        
-        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
-            '-t', str(duration),
-            '-r', '30',
-            '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
-            '-threads', '1',
-            '-c:a', 'aac', '-b:a', '96k',
-            '-movflags', '+faststart',
-            '-progress', progress_file, tmp]
-    else:            
-        cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
-            '-t', str(duration),
-            '-r', '24',
-            '-vf', 'scale=640:-2',
-            '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
-            '-threads', '1',
-            '-c:a', 'aac', '-b:a', '64k',
-            '-movflags', '+faststart',
-            '-progress', progress_file, tmp]
+    elif quality == 'medium':
+        if HW_ENCODER == 'h264_v4l2m2m':
+            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+                   '-t', str(duration), '-r', '30',
+                   '-vf', 'scale=1280:-2',
+                   '-pix_fmt', 'yuv420p',
+                   '-c:v', 'h264_v4l2m2m', '-b:v', '2M',
+                   '-c:a', 'aac', '-b:a', '96k',
+                   '-movflags', '+faststart',
+                   '-progress', progress_file, tmp]
+        else:
+            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+                   '-t', str(duration), '-r', '30',
+                   '-c:v', 'libx264', '-crf', '28', '-preset', 'ultrafast',
+                   '-threads', '1', '-c:a', 'aac', '-b:a', '96k',
+                   '-movflags', '+faststart',
+                   '-progress', progress_file, tmp]
+    else:
+        if HW_ENCODER == 'h264_v4l2m2m':
+            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+                   '-t', str(duration), '-r', '24',
+                   '-vf', 'scale=640:-2',
+                   '-pix_fmt', 'yuv420p',
+                   '-c:v', 'h264_v4l2m2m', '-b:v', '1M',
+                   '-c:a', 'aac', '-b:a', '64k',
+                   '-movflags', '+faststart',
+                   '-progress', progress_file, tmp]
+        else:
+            cmd = ['ffmpeg', '-y', '-ss', str(start), '-i', src,
+                   '-t', str(duration), '-r', '24',
+                   '-vf', 'scale=640:-2',
+                   '-c:v', 'libx264', '-crf', '35', '-preset', 'ultrafast',
+                   '-threads', '1', '-c:a', 'aac', '-b:a', '64k',
+                   '-movflags', '+faststart',
+                   '-progress', progress_file, tmp]
 
     with jobs_lock:
         jobs[job_id] = {'status': 'queued', 'progress': 0, 'output': None}
@@ -267,7 +332,8 @@ def get_output(filename):
 
 @app.route('/api/convert_queue', methods=['POST'])
 def add_to_convert_queue():
-    global queue_worker_running
+    global queue_worker_running, thumb_paused
+    thumb_paused = True
     data = request.json
     paths = data.get('paths', [])
     job_ids = []
