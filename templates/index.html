@@ -415,10 +415,13 @@
   function retryThumb(img) {
     const src = img.dataset.src;
     if (!src) return;
+    const attempts = parseInt(img.dataset.attempts || '0');
+    if (attempts >= 3) return; // give up after 3 tries
+    img.dataset.attempts = attempts + 1;
     img.removeAttribute('src');
     setTimeout(() => {
-      img.src = src + '?t=' + Date.now();
-    }, 5000);
+        img.src = src + '?t=' + Date.now();
+    }, 5000 * (attempts + 1)); // back off: 5s, 10s, 15s
   }
 
   function observeThumbs() {
@@ -623,6 +626,13 @@
     trimPollTimer = setInterval(async () => {
       const res = await fetch(`/api/progress/${jobId}?duration=${trimDuration}`);
       const data = await res.json();
+      if (data.error) {
+        // job not found - app restarted mid-trim
+        clearInterval(trimPollTimer); trimPollTimer = null;
+        showTrimError('Job lost — app was restarted. Please try again.');
+        return;
+      }
+
       if (data.status === 'running' || data.status === 'queued') {
         const pct = data.progress || 0;
         document.getElementById('trim-fill').style.width = pct + '%';
@@ -674,6 +684,15 @@
     convertPollTimer = setInterval(async () => {
       const res = await fetch(`/api/progress/${jobId}?duration=${convertDuration}`);
       const data = await res.json();
+
+      if (data.error) {
+        clearInterval(convertPollTimer); convertPollTimer = null;
+        setConversionBusy(false);
+        document.getElementById('convert-error').textContent = 'Job lost — app was restarted. Please try again.';
+        document.getElementById('convert-error').classList.add('show');
+        document.getElementById('convert-btn').disabled = false;
+        return;
+      }
       if (data.status === 'running' || data.status === 'queued') {
         const pct = data.progress || 0;
         document.getElementById('convert-fill').style.width = pct + '%';
