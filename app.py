@@ -72,9 +72,11 @@ def get_free_space(path):
 def get_videos(sd_path):
     videos = []
     for root, dirs, files in os.walk(sd_path):
+        # skip hidden directories like .Trashes, .Spotlight, etc.
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
         for f in files:
             ext = os.path.splitext(f)[1].upper()
-            if ext in ('.MP4', '.MOV', '.TS') and not f.startswith('._'):
+            if ext in ('.MP4', '.MOV', '.TS') and not f.startswith('._') and not f.startswith('.'):
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, sd_path)
                 size = os.path.getsize(full)
@@ -141,8 +143,11 @@ def run_convert_to_sd(job_id, src, out, cmd, duration, progress_file):
             jobs[job_id]['progress'] = 100
             jobs[job_id]['output'] = os.path.basename(out)
         else:
-            if os.path.exists(out):
-                os.remove(out)
+            try:
+                if os.path.exists(out):
+                    os.remove(out)
+            except:
+                pass
             jobs[job_id]['status'] = 'error'
             jobs[job_id]['error'] = result.stderr[-300:]
     if os.path.exists(progress_file):
