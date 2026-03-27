@@ -78,6 +78,12 @@ def get_videos(sd_path):
                 full = os.path.join(root, f)
                 rel = os.path.relpath(full, sd_path)
                 size = os.path.getsize(full)
+                size_mb = round(size / 1024 / 1024, 1)
+
+                # skip tiny files
+                if size_mb < 5:
+                    continue
+
                 is_ts = ext == '.TS'
                 converted_exists = False
                 conv_filename = None
@@ -90,10 +96,11 @@ def get_videos(sd_path):
                 videos.append({
                     "name": f,
                     "path": rel,
-                    "size_mb": round(size / 1024 / 1024, 1),
+                    "size_mb": size_mb,
                     "type": "ts" if is_ts else "video",
                     "converted": converted_exists,
-                    "converted_file": conv_filename if converted_exists else None
+                    "converted_file": conv_filename if converted_exists else None,
+                    "large": size_mb > 500  # flag large files
                 })
     return sorted(videos, key=lambda x: x["name"], reverse=True)
 
