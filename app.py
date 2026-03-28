@@ -25,14 +25,27 @@ thumb_resume_timer = None
 # captive portal detection — iOS, Android, Windows all check different URLs
 @app.route('/generate_204')
 @app.route('/gen_204')
+def generate_204():
+    # Android expects empty 204 when internet is available
+    # but we want to trigger captive portal so return 302
+    return redirect('http://192.168.4.1', 302)
+
 @app.route('/hotspot-detect.html')
 @app.route('/library/test/success.html')
+def apple_captive():
+    # iOS checks for specific content - must NOT return Success
+    # returning non-success triggers the captive portal popup
+    return '<html><body>hello</body></html>', 200
+
 @app.route('/success.txt')
 @app.route('/connecttest.txt')
 @app.route('/ncsi.txt')
+def windows_captive():
+    return 'Microsoft Connect Test', 200
+
 @app.route('/redirect')
 @app.route('/canonical.html')
-def captive_portal():
+def captive_redirect():
     return redirect('http://192.168.4.1', 302)
 
 def detect_hw_encoder():
